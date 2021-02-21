@@ -1,0 +1,1 @@
+when it comes time to set up your net inputs, separate day/hour/min/sec on inputs

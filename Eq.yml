@@ -1,9 +1,16 @@
-package: managed
-version: 0.1.3.3
+package: evo
+version: 0.0.0.1
 
 depends:
 - base
 - contrib
-- network
 - managed
+- idris2-elab-util
+- idris2-sop
+- idris2-pretty-show
+- idris2-json
+- idris2-hedgehog
+- sqlite3
 
+main: Oanda.ToDB
+executable: Fef

@@ -1,0 +1,16 @@
+I want to faithfully reproduce oanda types into ADTs, at least what I'll
+need, and then convert them to the form I'll use when I use them. This lets
+me separate concerns
+
+
+
+-- check for dupes
+select * from candle where rowid not in (select min (rowid) from candle group by opentime,granularity);
+
+-- delete dupes
+delete from candle where rowid not in (select min (rowid) from candle group by opentime,granularity);
+
+delete from candle where complete = 0;
+
+-- check totals
+select *,count(*) as cnt from candle;

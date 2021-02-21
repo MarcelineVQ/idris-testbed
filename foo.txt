@@ -1,0 +1,18 @@
+try sqlite as plain c first
+try it as plain c passing pointers
+try the passing in idris
+
+make vector api
+immutable first. writes will copy though, how to fuse writes?
+
+does racket profiling offer time info?
+examine vast majority of time spent:
+cast to/from int
+state bind
+
+you can write a c lib for direct arrays, is that faster than native chez vectors?
+is arrayfire a good replacement for blas lapack
+how about just using blas lapack
+
+does it make sense to convert a net to a matrix or is running a layer at a time just as fast
+this can be trialed on a finished net rather than during evo
