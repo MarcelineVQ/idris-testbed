@@ -9,13 +9,22 @@ import Num.Floating
 
 import Data.List
 
+import JSON
+import Generics.Derive
+%language ElabReflection
+
 -- An IOArray of exact aent count
 
 -- Not sure how else to extract size while retaining relation without exposing
 -- constructor for casing
 public export
-data SIOArray : (size : Nat) -> Type -> Type where
+data SIOArray : Nat -> Type -> Type where
   MkSIOArray : (size : Nat) -> (intSize : Int) -> (content : ArrayData a) -> SIOArray size a
+
+-- %runElab derive "SIOArray" [Generic,Meta]
+
+-- I want json for this
+
 
 export
 size : SIOArray s a -> Int
@@ -42,11 +51,15 @@ newArray' x = let intsize = cast s
               in pure (MkSIOArray s intsize !(primIO (prim__newArray intsize x)))
 
 export
-writeArray : HasIO io => SIOArray s a -> (i : Nat) -> (prf : LTE i s) => a -> io ()
+writeArray : HasIO io => SIOArray s a -> (i : Nat) -> (0 prf : LTE i s) => a -> io ()
 writeArray arr i x = primIO (prim__arraySet (content arr) (cast i) x)
 
 export
-readArray : HasIO io => SIOArray s a -> (i : Nat) -> (prf : LTE i s) => io a
+unsafeReadArray : HasIO io => SIOArray s a -> (i : Nat) -> io a
+unsafeReadArray arr i = primIO (prim__arrayGet (content arr) (cast i))
+
+export
+readArray : HasIO io => SIOArray s a -> (i : Nat) -> (0 prf : LTE i s) => io a
 readArray arr i = primIO (prim__arrayGet (content arr) (cast i))
 
 export
@@ -72,10 +85,10 @@ newArrayFillM s g = do
           go new s {prf = fef s}
           pure new
   where
-    go : SIOArray s a -> (i : Nat) -> (prf : LTE i s) => io ()
+    go : SIOArray s a -> (i : Nat) -> (0 prf : LTE i s) => io ()
     go new 0 = pure ()
     go new (S k) = do 
-      let newprf = lteSuccLeft prf
+      let 0 newprf = lteSuccLeft prf
       writeArray new k !(g k)
       go new k
 
@@ -84,18 +97,18 @@ foldlArray : HasIO io => (b -> a -> b) -> b -> SIOArray s a -> io b
 foldlArray f acc arr = case arr of
     MkSIOArray s _ _ => go s {prf = fef s}
   where
-    go : (i : Nat) -> (prf : LTE i s) => io b
+    go : (i : Nat) -> (0 prf : LTE i s) => io b
     go 0 = pure acc
-    go (S k) = let p = lteSuccLeft prf in [| f (go k) (readArray arr k) |]
+    go (S k) = let 0 p = lteSuccLeft prf in [| f (go k) (readArray arr k) |]
 
 export
 foldMapArray : (HasIO io, Monoid b) => (a -> b) -> SIOArray s a -> io b
 foldMapArray f arr = case arr of
     MkSIOArray s _ _ => go s {prf = fef s}
   where
-    go : (i : Nat) -> (prf : LTE i s) => io b
+    go : (i : Nat) -> (0 prf : LTE i s) => io b
     go 0 = f <$> readArray arr 0
-    go (S k) = let p = lteSuccLeft prf in [| (f <$> readArray arr k) <+> go k |]
+    go (S k) = let 0 p = lteSuccLeft prf in [| (f <$> readArray arr k) <+> go k |]
 
 export
 mapArray : HasIO io => (a -> b) -> SIOArray s a -> io (SIOArray s b)
@@ -105,10 +118,10 @@ mapArray f arr = case arr of
       go new s {prf = fef s}
       pure new
   where
-    go : SIOArray s b -> (i : Nat) -> (prf : LTE i s) => io ()
+    go : SIOArray s b -> (i : Nat) -> (0 prf : LTE i s) => io ()
     go new 0 = pure ()
     go new (S k) = do
-      let newprf = lteSuccLeft prf
+      let 0 newprf = lteSuccLeft prf
       v <- readArray arr k
       writeArray new k (f v)
       go new k
@@ -121,10 +134,10 @@ imapArrayM f arr = case arr of
       go new s {prf = fef s}
       pure new
   where
-    go : SIOArray s b -> (i : Nat) -> (prf : LTE i s) => io ()
+    go : SIOArray s b -> (i : Nat) -> (0 prf : LTE i s) => io ()
     go new 0 = pure ()
     go new (S k) = do
-      let newprf = lteSuccLeft prf
+      let 0 newprf = lteSuccLeft prf
       v <- readArray arr k
       writeArray new k !(f k v)
       go new k
@@ -137,10 +150,10 @@ zipWithArray f arr1 arr2 = case arr1 of
       go new s {prf = fef s}
       pure new
   where
-    go : SIOArray s c -> (i : Nat) -> (prf : LTE i s) => io ()
+    go : SIOArray s c -> (i : Nat) -> (0 prf : LTE i s) => io ()
     go new 0 = pure ()
     go new (S k) = do
-      let newprf = lteSuccLeft prf
+      let 0 newprf = lteSuccLeft prf
       v1 <- readArray arr1 k
       v2 <- readArray arr2 k
       writeArray new k (f v1 v2)
@@ -158,13 +171,14 @@ fromList xs with (length xs)
       go new (reverse xs) s {prf = fef s}
       pure new
   where
-    go : SIOArray s a -> (xs : List a) -> (i : Nat) -> (prf : LTE i s) => io ()
+    go : SIOArray s a -> (xs : List a) -> (i : Nat) -> (0 prf : LTE i s) => io ()
     go new (x :: xs) (S k) = do
-      let newprf = lteSuccLeft prf
+      let 0 newprf = lteSuccLeft prf
       writeArray new k x
       go new xs k
     go new _ _ = pure ()
 
+-- the length + reversing is slow, merge the op? build up a chain of writes to execute after length is known?
 export
 fromList' : HasIO io => (xs : List a) -> io (s : Nat ** SIOArray s a)
 fromList' xs = do
@@ -173,9 +187,9 @@ fromList' xs = do
     go new (reverse xs) s {prf = fef s}
     pure (s ** new)
   where
-    go : SIOArray s a -> (xs : List a) -> (i : Nat) -> (prf : LTE i s) => io ()
+    go : SIOArray s a -> (xs : List a) -> (i : Nat) -> (0 prf : LTE i s) => io ()
     go new (x :: xs) (S k) = do
-      let newprf = lteSuccLeft prf
+      let 0 newprf = lteSuccLeft prf
       writeArray new k x
       go new xs k
     go new _ _ = pure ()

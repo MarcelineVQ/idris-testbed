@@ -12,6 +12,8 @@ import Control.Monad.State
 import Data.Strong.IOMatrix
 import Data.Strong.IOArray
 
+import Net.Types
+
 import Data.List
 
 import Util
@@ -97,14 +99,6 @@ copyNet (O w) = [| O (copyWeights w) |]
 copyNet (L w y) = [| L (copyWeights w) (copyNet y) |]
 
 export
-data Genome : Nat -> Type where
-  MkGenome : Network i hs o -> (fitness : Double) -> Genome i
-
-export
-fitness : Genome i -> Double
-fitness (MkGenome _ f) = f
-
-export
 randParent : HasIO io => MonadState (Bits64,Bits64) io => io (Network 2 [2] 1)
 randParent = randomNet
 
@@ -165,10 +159,7 @@ xorFit x = if x >= 0.5 then 1 else 0
 average : List Double -> Double
 average xs = sum xs / cast (length xs)
 
-prettyGenome : Genome i -> String
-prettyGenome (MkGenome net f) = "MkGenome " ++ prettyNet net ++ " " ++ show f
-
-evalParent : HasIO io => MonadState (Bits64,Bits64) io => StochasticEval -> Genome 2 -> io (Genome 2, Genome 2)
+evalParent : HasIO io => MonadState (Bits64,Bits64) io => StochasticEval -> Genome 2 1 -> io (Genome 2 1, Genome 2 1)
 evalParent params (MkGenome parentNet parentFit) = do
     -- eval parent
     inputs <- traverse xorInput' [(1,1), (0,0), (1,0), (0,1)] --replicateA (batch params) xorInput
@@ -183,7 +174,7 @@ evalParent params (MkGenome parentNet parentFit) = do
     let res' = average zs'
     pure (MkGenome parentNet !(stochasticFitness params parentFit), MkGenome childNet !(stochasticFitness params res'))
 
-pLoop : StochasticEval -> (parents : List (Genome 2)) -> StateT (Bits64,Bits64) IO (List (Genome 2))
+pLoop : StochasticEval -> (parents : List (Genome 2 1)) -> StateT (Bits64,Bits64) IO (List (Genome 2 1))
 pLoop params parents = do
     -- eval pop
     evs <- for parents $ \p => do
@@ -198,7 +189,7 @@ pLoop params parents = do
     -- putStrLn $ maybe "" prettyGenome (head' finalNets)
     pure finalNets
 
-popLoop : StochasticEval -> (parents : List (Genome 2)) -> Nat -> StateT (Bits64,Bits64) IO (List (Genome 2))
+popLoop : StochasticEval -> (parents : List (Genome 2 1)) -> Nat -> StateT (Bits64,Bits64) IO (List (Genome 2 1))
 popLoop params parents Z = pLoop params parents
 popLoop params parents (S k) = popLoop params !(pLoop params parents) k
 

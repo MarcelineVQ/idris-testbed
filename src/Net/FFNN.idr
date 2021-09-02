@@ -13,29 +13,15 @@ import System.Random.Natural
 
 import System.Random.PRNG.Squares
 
-import Net.Activations
+import public Net.Activations
+
+import Net.Types
 
 import Util
 
 -- I want to predict what x bars from now will be, lets say 10 bars
 -- most direct choice is feed-forward on 100 bars at once, with
 -- high,low,open,close per bar. This means our input layer is 400 wide
-public export
-record Weights (i : Nat) (o : Nat) where
-  constructor MkWeights
-  wBias : SIOArray o Double
-  wNodes : SIOMatrix o i Double
-
-
-{-
-Now, a Weights linking an m-node layer to an n-node layer has an n-dimensional
-bias vector (one component for each output) and an n-by-m node weight matrix
-(one column for each output, one row for each input).
--}
-public export
-data Network : Nat -> List Nat -> Nat -> Type where
-  O : Weights i o -> Network i [] o
-  L : Weights i h -> Network h hs o -> Network i (h :: hs) o
 
 export
 randomArr : HasIO io => (s : Nat) -> io (SIOArray s Double)
@@ -59,25 +45,21 @@ randomNet i [] o = O <$> randomWeights i o
 randomNet i (h :: hs) o = [| L (randomWeights i h) (randomNet h hs o) |]
 
 export
-prettyWeights : Weights i o -> String
-prettyWeights (MkWeights wBias wNodes) = prettyMatrix wNodes ++ "\n" ++ prettyArray wBias ++ "\n\n"
-
-export
-prettyNet : Network i hs o -> String
-prettyNet (O x) = prettyWeights x
-prettyNet (L x y) = prettyWeights x ++ "\n" ++ prettyNet y
-
-export
 runLayer : HasIO io => Weights i o -> SIOArray i Double -> io (SIOArray o Double)
 runLayer (MkWeights wB wN) v = wB + !(wN #> v)
 
 export
-runNet : HasIO io => Network i hs o -> SIOArray i Double -> io (SIOArray o Double)
-runNet (O x) input = mapArray logistic !(runLayer x input)
-runNet (L x y) input = do
+runNet' : HasIO io => (Double -> Double) -> Network i hs o -> SIOArray i Double -> io (SIOArray o Double)
+runNet' f (O x) input = runLayer x input -- mapArray f !(runLayer x input) -- don't run on last layer, if we want to clamp the layer, do it when evaluating
+runNet' f (L x y) input = do
   z <- runLayer x input
-  c <- mapArray logistic z -- this can generalize to other funcs
-  runNet y c
+  c <- mapArray f z
+  runNet' f y c
+
+export
+%inline
+runNet : HasIO io => Network i hs o -> SIOArray i Double -> io (SIOArray o Double)
+runNet = runNet' logistic
 
 export
 testRunNet : IO (SIOArray 1 Double)

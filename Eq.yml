@@ -12,5 +12,5 @@ depends:
 - idris2-hedgehog
 - sqlite3
 
-main: Oanda.ToDB
+main: Net.SSS15M
 executable: Fef

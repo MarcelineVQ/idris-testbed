@@ -11,6 +11,8 @@ import Data.IORef
 
 import System -- usleep
 
+import TimeIt
+
 -- import Data.String
 import Data.List
 
@@ -212,6 +214,7 @@ fetchSQLCandleType stmt = do
 
 
 -- seems to order correctly
+-- I MUST speed up fetchSQLCandleType
 export
 fetchRows : Stmt -> IO (Either SqlResult (List SQLCandleType))
 fetchRows stmt = runEitherT {m=IO} {e=SqlResult} $ do
@@ -231,8 +234,10 @@ getCandles' sql = do
       | Left err => putStrLn "db open error" *> pure []
     Right stmt <- managedStmt db sql
       | Left err => putStrLn "stmt make error" *> pure []
+    sqlCmd db "begin;"
     Right r <- liftIO $ fetchRows stmt
       | Left err => putStrLn "row get error" *> pure []
+    sqlCmd db "end;"
     pure r
 
 export

@@ -36,11 +36,11 @@ maxHeight (MkSIOMatrix _ _ mh _ _) = mh
 
 
 export
-read : HasIO io => SIOMatrix h w a -> (row,col : Nat) -> (prf1 : LTE col w) => (prf2 : LTE row h) => io a
+read : HasIO io => SIOMatrix h w a -> (row,col : Nat) -> (0 prf1 : LTE col w) => (0 prf2 : LTE row h) => io a
 read mat row col = primIO (prim__arrayGet (content mat) (cast row * maxWidth mat + cast col))
 
 export
-write : HasIO io => SIOMatrix h w a -> (row,col : Nat) -> a -> LTE col w => LTE row h => io ()
+write : HasIO io => SIOMatrix h w a -> (row,col : Nat) -> a -> (0 prf1 : LTE col w) => (0 prf2 : LTE row h) => io ()
 write mat row col x = primIO (prim__arraySet (content mat) (cast row * maxWidth mat + cast col) x)
 
 fef : (j : Nat) -> LTE j j
@@ -65,16 +65,16 @@ newFillM rows cols g = do
           rowLoop h w mat {prf1 = fef h} {prf2 = fef w}
           pure mat
   where
-    colLoop : (r : Nat) -> (c : Nat) -> SIOMatrix rows cols a -> (prf1 : LTE r rows) => (prf2 : LTE c cols) => io ()
+    colLoop : (r : Nat) -> (c : Nat) -> SIOMatrix rows cols a -> (0 prf1 : LTE r rows) => (0 prf2 : LTE c cols) => io ()
     colLoop r 0 mat' = pure ()
     colLoop r (S c) mat' = do
-      let p = lteSuccLeft prf2
+      let 0 p = lteSuccLeft prf2
       write mat' r c !(g r c)
       colLoop r c mat' {prf2 = p}
-    rowLoop : (r : Nat) -> (w'' : Nat) -> (prf1 : LTE r rows) => (prf2 : LTE w'' cols) => SIOMatrix rows cols a -> io ()
+    rowLoop : (r : Nat) -> (w'' : Nat) -> (0 prf1 : LTE r rows) => (0 prf2 : LTE w'' cols) => SIOMatrix rows cols a -> io ()
     rowLoop 0 w'' mat' = pure ()
     rowLoop (S k) w'' mat' = do
-      let p = lteSuccLeft prf1
+      let 0 p = lteSuccLeft prf1
       colLoop k w'' mat'
       rowLoop k w'' mat'
 
@@ -85,17 +85,17 @@ foldlMatrix f acc mat = do
         MkSIOMatrix h w _ _ _ => do
           rowLoop h w mat {prf1 = fef h} {prf2 = fef w}
   where
-    colLoop : (r : Nat) -> (c : Nat) -> SIOMatrix rows cols a -> (prf1 : LTE r rows) => (prf2 : LTE c cols) => io b
+    colLoop : (r : Nat) -> (c : Nat) -> SIOMatrix rows cols a -> (0 prf1 : LTE r rows) => (0 prf2 : LTE c cols) => io b
     colLoop r 0 mat' = pure acc
     colLoop r (S c) mat' = do
-      let p = lteSuccLeft prf2
+      let 0 p = lteSuccLeft prf2
       v <- read mat' r c
       rest <- colLoop r c mat'
       pure (f rest v)
-    rowLoop : (r : Nat) -> (w'' : Nat) -> (prf1 : LTE r rows) => (prf2 : LTE w'' cols) => SIOMatrix rows cols a -> io (List b)
+    rowLoop : (r : Nat) -> (w'' : Nat) -> (0 prf1 : LTE r rows) => (0 prf2 : LTE w'' cols) => SIOMatrix rows cols a -> io (List b)
     rowLoop 0 w'' mat' = pure []
     rowLoop (S k) w'' mat' = do
-      let p = lteSuccLeft prf1
+      let 0 p = lteSuccLeft prf1
       v <- colLoop k w'' mat'
       rest <- rowLoop k w'' mat'
       pure (rest ++ [v])
@@ -113,17 +113,17 @@ imapMatrixM g mat = do
           rowLoop h w mat' {prf1 = fef h} {prf2 = fef w}
           pure mat'
   where
-    colLoop : (r : Nat) -> (c : Nat) -> SIOMatrix h w b -> (prf1 : LTE r h) => (prf2 : LTE c w) => io ()
+    colLoop : (r : Nat) -> (c : Nat) -> SIOMatrix h w b -> (0 prf1 : LTE r h) => (0 prf2 : LTE c w) => io ()
     colLoop r 0 mat' = pure ()
     colLoop r (S c) mat' = do
-      let p = lteSuccLeft prf2
+      let 0 p = lteSuccLeft prf2
       v <- read mat r c
       write mat' r c !(g r c v)
       colLoop r c mat' {prf2 = p}
-    rowLoop : (r : Nat) -> (w'' : Nat) -> (prf1 : LTE r h) => (prf2 : LTE w'' w) => SIOMatrix h w b -> io ()
+    rowLoop : (r : Nat) -> (w'' : Nat) -> (0 prf1 : LTE r h) => (0 prf2 : LTE w'' w) => SIOMatrix h w b -> io ()
     rowLoop 0 w'' mat' = pure ()
     rowLoop (S k) w'' mat' = do
-      let p = lteSuccLeft prf1
+      let 0 p = lteSuccLeft prf1
       colLoop k w'' mat'
       rowLoop k w'' mat'
 
@@ -138,17 +138,17 @@ vectMult' mat arr = case mat of
       rowLoop h w arrr {prf1 = fef h} {prf2 = fef w}
       pure arrr
   where
-    colLoop : (r : Nat) -> (c : Nat) -> (prf1 : LTE r h) => (prf2 : LTE c w) => io (List a)
+    colLoop : (r : Nat) -> (c : Nat) -> (0 prf1 : LTE r h) => (0 prf2 : LTE c w) => io (List a)
     colLoop r 0 = pure []
     colLoop r (S c) = do
-      let p = lteSuccLeft prf2
+      let 0 p = lteSuccLeft prf2
       mv <- read mat r c
       av <- readArray arr c
       [| pure (av * mv) :: colLoop r c {prf2 = p} |]
-    rowLoop : (r : Nat) -> (w'' : Nat) -> (prf1 : LTE r h) => (prf2 : LTE w'' w) => SIOArray h a -> io ()
+    rowLoop : (r : Nat) -> (w'' : Nat) -> (0 prf1 : LTE r h) => (0 prf2 : LTE w'' w) => SIOArray h a -> io ()
     rowLoop 0 w'' arr' = pure ()
     rowLoop (S k) w'' arr = do
-        let p = lteSuccLeft prf1
+        let 0 p = lteSuccLeft prf1
         updrow <- colLoop k w''
         writeArray arr k (sum updrow)
         rowLoop k w'' arr

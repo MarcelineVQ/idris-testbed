@@ -16,6 +16,8 @@ import Data.Strong.IOArray
 
 import Data.List
 
+import Net.Types
+
 import Util
 
 record StochasticEval where

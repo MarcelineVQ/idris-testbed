@@ -8,6 +8,12 @@ import Control.Monad.Managed
 
 import Net.FFNN
 
+import Net.Types
+
+import Data.IORef
+
+-- import System.Future
+
 import System.Random
 import Net.Random.Squares
 
@@ -23,6 +29,28 @@ import Data.Vect
 
 import Util
 
+import TimeIt
+
+-- :exec runStochastic 1 $ record {batch = 4, parentsCount = 15, stochasticity = 0.05, mutRate = 0.1, maxEvaluations = 100, dataSources=100} defaultStochasticEval
+
+fraf' : IO b -> IORef (Maybe b) -> IO (ThreadID, IORef (Maybe b))
+fraf' act ref = do
+  t <- fork (act >>= writeIORef ref . Just)
+  pure (t,ref)
+
+
+
+-- use chunksOf to make thread count, or recurse with take untill []
+mapConcurrently : (threads : Int) -> (a -> IO b) -> List a -> IO (List b)
+mapConcurrently i f xs = do
+  futures <- for xs $ \x => newIORef Nothing >>= fraf' (f x)
+  Just res <- map sequence . for futures $ \(t,ref) => do
+      threadWait t
+      readIORef ref
+    | Nothing => pure []
+  pure res
+
+
 record StochasticEval where
   constructor MkStochasticEval
   stochasticity : Double
@@ -33,37 +61,43 @@ record StochasticEval where
   randomlyVaryingInitialCondition : Bool
   maxFitness : Double
   batch : Nat -- number of tests to average for fitness
+  dataSources : Nat
 
 defaultStochasticEval : StochasticEval
 defaultStochasticEval = MkStochasticEval
-  0.05 -- mut chance
-  0.01 -- stochastic fitness modification
-  0.5 -- half chance of mut half of perturb
-  20
-  500
-  True
-  1
-  1
+  0.01 -- stochasticity
+  0.05 -- mutRate
+  0.5 -- perturbProb    -- half chance of mut half of perturb
+  20 -- parentsCount
+  500 -- maxEvaluations
+  True -- randomlyVaryingInitialCondition
+  1 -- maxFitness
+  8 -- batch
+  20 -- dataSources
 
--- SIOArray of Doubles
-public export
-DArray : Nat -> Type
-DArray n = SIOArray n Double
+average : List Double -> Double
+average xs = sum xs / cast (length xs)
 
 sumMoid : HasIO io => DArray o -> io Double
 sumMoid arr = sumArray arr
 
 -- evaluate a network and return the squared error
-eval' : HasIO io => Network i hs o -> (input : DArray i) -> (f : DArray o -> io Double) -> (target : DArray o) -> io (Double, DArray o)
+-- we should multiple the array by a coefficient array to bias later guesses
+eval' : HasIO io => Network i hs 20 -> (input : DArray i) -> (f : DArray 20 -> io Double) -> (target : DArray 20) -> io (Double, DArray 20)
 eval' net input f target = do
   r <- runNet net input
-  err <- f !(zipWithArray (-) target r)
-  let fitness = 1 - squared err
-  pure (fitness, r)
+  -- bias <- fromList [1.0,1.0,1.0,1.0,2.0,2.0,2.0,2.0,3.0,3.0,3.0,3.0,4.0,4.0,4.0,4.0,5.0,5.0,5.0,5.0]
+  diff <- zipWithArray (-) target r
+  -- err <- f !(zipWithArray (*) diff bias)
+  err <- sumArray =<< mapArray squared diff
+  errs <- toList =<< mapArray (\x => 1 - squared x) diff
+  let fitness = 1 - err
+  let fitness' = average errs
+  pure (fitness', r)
 
 eval : HasIO io => Network i hs o -> (input : DArray i) -> (f : DArray o -> io Double) -> (target : Double) -> io (Double,Double)
 eval net input f target = do
-  r <- runNet net input
+  r <- runNet' leakyRelu net input
   res <- f r
   let err = target - res
       fitness = 1 - squared err
@@ -95,18 +129,11 @@ copyNet : HasIO io => Network i hs o -> io (Network i hs o)
 copyNet (O w) = [| O (copyWeights w) |]
 copyNet (L w y) = [| L (copyWeights w) (copyNet y) |]
 
-export
-data Genome : Nat -> Type where
-  MkGenome : Network i hs o -> (fitness : Double) -> Genome i
-
-export
-fitness : Genome i -> Double
-fitness (MkGenome _ f) = f
-
 -- 100 input bars of open,high,low,close. 5 ouputs, the predictions of the coming candles
 -- I might need relu/swish here to allow for larger values
 export
-randParent : HasIO io => MonadState (Bits64,Bits64) io => io (Network 400 [100,50,25,10] 5)
+randParent : HasIO io => MonadState (Bits64,Bits64) io => io (Network 400 [200,100,40] 20)
+-- randParent : HasIO io => MonadState (Bits64,Bits64) io => io (Network 400 [100,200,120,80] 20)
 randParent = randomNet
 
 export
@@ -141,131 +168,119 @@ stochasticFitness params fitness = do
 randBit : MonadState (Bits64,Bits64) io => io Double
 randBit = pure $ if !nextRand > 0 then 1.0 else 0.0
 
-average : List Double -> Double
-average xs = sum xs / cast (length xs)
-
-prettyGenome : Genome i -> String
-prettyGenome (MkGenome net f) = "MkGenome " ++ prettyNet net ++ " " ++ show f
-
-getData : HasIO io => MonadState (Bits64,Bits64) io => io (Maybe (DArray 400, DArray 5))
-getData = do
-    start <- show <$> nextRandRW (0,280000)  -- random number roughly between 0 and db size - 100
-    liftIO $ putStrLn start
+-- get data is slow slow slow
+getData : HasIO io => MonadState (Bits64,Bits64) io => io (Maybe (DArray 400, DArray 20))
+getData = timeIt "getData" $ do
+    -- start <- show <$> nextRandRW (0,280000)  -- random number roughly between 0 and db size - 100
+    start <- show . (`mod`280000) <$> nextRandW -- random number roughly between 0 and db size - 100
+    -- liftIO $ putStrLn start
     let count = "105" -- we want 5 extra as targets
         sql = "where granularity = \"M15\" and instrument = \"USD_CAD\" order by opentime limit \{start},\{count}"
-    liftIO $ putStrLn sql
+    -- liftIO $ putStrLn sql
     input' <- liftIO $ getCandles'' sql
     let (inputs,targets) = splitAt 100 input'
-        inputs = cast {to=Double} <$> concatMap sqlCandleMids inputs
-    (is ** input) <- liftIO $ fromList' inputs
-    (ts ** target) <- liftIO $ fromList' targets
+        inputs'  = cast {to=Double} <$> concatMap sqlCandleMids inputs
+        targets' = cast {to=Double} <$> concatMap sqlCandleMids targets
+    (is ** input)  <- fromList' inputs'
+    (ts ** target) <- fromList' targets'
+    -- putStrLn $ prettyArray input
+    -- putStrLn $ prettyArray target
     case is of
       400 => case ts of -- eval pop
-        5 => ?dsfdssd --pure $ Just (input,target)
-        _ => pure Nothing
+               20 => pure $ Just (input,target)
+               _  => pure Nothing
       _ => pure Nothing
 
--- I should be doing the random input choices here, grab 8 and try each out per net.
-evalParent : HasIO io => MonadState (Bits64,Bits64) io => StochasticEval -> Genome 400 -> io (Genome 400, Genome 400)
-evalParent params p@(MkGenome parentNet parentFit) = do
-    Just datas <- sequence <$> replicateA 8 getData
-      | _ => putStrLn "data generation error" *> pure (p,p)
+randomRead : HasIO io => MonadState (Bits64,Bits64) io => SIOArray s a -> io a
+randomRead arr = do
+  let c = cast $ !nextRandW `mod` cast (size arr)
+  unsafeReadArray arr c
 
-    -- re-eval parent
-    (zs,rs) <- unzip <$> traverse (\(inp,tar) => eval' parentNet inp sumMoid ?dsfsdf) datas
-    
-    ?sdffsdfsd
+-- I should be doing the random input choices here, grab 8 and try each out per net.
+evalParent : HasIO io => MonadState (Bits64,Bits64) io => StochasticEval -> SIOArray s (DArray 400, DArray 20) -> Genome 400 20 -> io (Genome 400 20, Genome 400 20)
+evalParent params datas' p@(MkGenome parentNet parentFit) = do
+    datas <- replicateA (batch params) (randomRead datas')
 
     -- copy parent and mutate
-    -- childNet <- copyNet parentNet >>= mutateNet (mutRate params) (perturbProb params)
+    childNet <- copyNet parentNet >>= mutateNet (mutRate params) (perturbProb params)
+
+    -- re-eval parent
+    ps <- traverse (\(inp,tar) => fst <$> eval' parentNet inp sumMoid tar) datas
     -- eval copy
-    -- (zs',rs') <- unzip <$> traverse (\inp => eval childNet input sumMoid target) input
-    -- let res' = average zs'
-    -- pure (MkGenome parentNet !(stochasticFitness params parentFit), MkGenome childNet !(stochasticFitness params res'))
+    cs <- traverse (\(inp,tar) => fst <$> eval' childNet inp sumMoid tar) datas
+
+    -- average fitnesses and apply stochasticity to improve exploration
+    sfp <- stochasticFitness params (average ps)
+    sfc <- stochasticFitness params (average cs)
+    pure (MkGenome parentNet sfp, MkGenome childNet sfc)
+
+fraf : IORef (Maybe (Genome 400 20, Genome 400 20)) -> StateT (Bits64,Bits64) IO (Genome 400 20, Genome 400 20) -> IO ()
+fraf ref st = do
+  seed1 <- cast {from=Int} {to=Bits64} <$> randomIO
+  seed2 <- cast {from=Int} {to=Bits64} <$> randomIO
+  res <- evalStateT (seed1,seed2) st
+  writeIORef ref (Just res)
 
 -- basetime 2010-01-01T00.000000000Z
 -- randomTime : HasIO io => MonadState (Bits64,Bits64) io => io DateTime
 
-pLoop : StochasticEval -> (parents : List (Genome 400)) -> StateT (Bits64,Bits64) IO (List (Genome 400))
-pLoop params parents = do
-    -- get our input data
-    start <- show <$> nextRandRW (0,280000)  -- random number roughly between 0 and db size - 100
-    liftIO $ putStrLn start
-    let count = "105" -- we want 5 extra as targets
-        sql = "where granularity = \"M15\" and instrument = \"USD_CAD\" order by opentime limit \{start},\{count}"
-    liftIO $ putStrLn sql
-    input' <- liftIO $ getCandles'' sql
-    let (inputs,targets) = splitAt 100 input'
-        inputs = cast {to=Double} <$> concatMap sqlCandleMids inputs
-    (is ** input) <- liftIO $ fromList' inputs
-    (ts ** target) <- liftIO $ fromList' targets
-    evs <- case is of
-          400 => case ts of -- eval pop
-            5 => for parents $ \p => evalParent params p
-            _ => pure []
-          _ => pure []
+pLoop : StochasticEval -> (parents : List (Genome 400 20)) -> SIOArray s (DArray 400, DArray 20) -> StateT (Bits64,Bits64) IO (List (Genome 400 20))
+pLoop params parents datas = timeIt "pLoop" $ do
+    evts <- liftIO $ for parents $ \p => do
+      ref <- newIORef Nothing
+      t <- fork (fraf ref (evalParent params datas p))
+      pure (t,ref)
         -- evs consists of evaluated parent and child
         -- unzip them, concat, sort by fitness, and take (parentsCount params)
+    Just evs <- liftIO $ map sequence $ for evts (\(t,ref) => threadWait t *> readIORef ref)
+      | Nothing => putStrLn "evs failure" *> pure []
     let (pNets,cNets) = unzip evs
         nets = pNets ++ cNets
         sortedNets = sortOn @{Down} fitness nets -- sort best first
         finalNets = take (parentsCount params) sortedNets
+    printLn $ map fitness finalNets
     pure finalNets
 
-popLoop : StochasticEval -> (parents : List (Genome 400)) -> Nat -> StateT (Bits64,Bits64) IO (List (Genome 400))
-popLoop params parents Z = pLoop params parents
-popLoop params parents (S k) = popLoop params !(pLoop params parents) k
+popLoop : StochasticEval -> (parents : List (Genome 400 20)) -> SIOArray s (DArray 400, DArray 20) -> Nat -> StateT (Bits64,Bits64) IO (List (Genome 400 20))
+popLoop params parents datas Z = pure parents
+popLoop params parents datas (S k) = popLoop params !(pLoop params parents datas) datas k
+
+-- I need to learn how to save nets now so I can work on them whenever
 
 export
 stochasticXor : StochasticEval -> StateT (Bits64,Bits64) IO Double
 stochasticXor params = do
+    -- preget a bunch of trial data here and pass it along, getting trial data
+    -- during evaluation is wicked expensive
+    -- make an array of data and just pick batchNo of indexes at random
+
+    Just datas <- timeIt "main:get all datas" $ sequence <$> replicateA (dataSources params) getData
+      | _ => putStrLn "data generation error" *> pure 0
+    (s ** training_data) <- fromList' datas
+
+    -- at some point I want to pull some bests-of from sql and use them as the starting pop
     parents <- replicateA (parentsCount params) (pure (MkGenome !randParent 0.0))
     -- traverse_ (\(MkGenome n _) => putStrLn (prettyNet n)) parents
     -- evolve parents for max evaluations
-    bests <- popLoop params parents (maxEvaluations params)
+    bests <- popLoop params parents training_data (maxEvaluations params)
+    putStrLn "Bests:"
     printLn (map fitness bests)
     (MkGenome bestNet f) :: _ <- pure bests
       | _ => pure 0
+    putStrLn "Best fitness:"
     printLn f
-    -- best
-    -- input <- newArray 2 0.0
-    -- x <- pure 1
-    -- y <- pure 1
-    -- writeArray input 0 x  
-    -- writeArray input 1 y
-    -- putStr $ prettyArray input
-    -- putStrLn $ ": target " ++ show (xorTarget x y)
-    -- (err,res) <- eval bestNet input sumMoid (xorTarget x y)
-    -- printLn (err,res,xorFit res)
-    -- 
-    -- x <- pure 0
-    -- y <- pure 0
-    -- writeArray input 0 x
-    -- writeArray input 1 y
-    -- putStr $ prettyArray input
-    -- putStrLn $ ": target " ++ show (xorTarget x y)
-    -- (err,res) <- eval bestNet input sumMoid (xorTarget x y)
-    -- printLn (err,res,xorFit res)
-    -- 
-    -- x <- pure 1
-    -- y <- pure 0
-    -- writeArray input 0 x
-    -- writeArray input 1 y
-    -- putStr $ prettyArray input
-    -- putStrLn $ ": target " ++ show (xorTarget x y)
-    -- (err,res) <- eval bestNet input sumMoid (xorTarget x y)
-    -- printLn (err,res,xorFit res)
-    -- 
-    -- x <- pure 0
-    -- y <- pure 1
-    -- writeArray input 0 x
-    -- writeArray input 1 y
-    -- putStr $ prettyArray input
-    -- putStrLn $ ": target " ++ show (xorTarget x y)
-    -- (err,res) <- eval bestNet input sumMoid (xorTarget x y)
-    -- printLn (err,res,xorFit res)
-    
-    -- putStrLn $ prettyNet bestNet
+
+    -- gen some data and try it
+    Just (inp,tar) <- getData
+      | _ => pure f
+    (fit,res) <- eval' bestNet inp sumMoid tar
+    putStrLn "Target:"
+    putStrLn $ prettyArray tar
+    putStrLn "Result:"
+    putStrLn $ prettyArray res
+    putStrLn "Fitness:"
+    printLn fit
+
     pure f
 
 
@@ -366,19 +381,19 @@ last 1/20 period of the evolutionary process.
 -- will get every xor correct.
 -- runs and popsize have similar impact on fitness
 export
-runStochastic : StochasticEval -> IO ()
-runStochastic params = do
+runStochastic : Int -> StochasticEval -> IO ()
+runStochastic runs params = do
   seed1 <- cast {from=Int} {to=Bits64} <$> randomIO
   seed2 <- cast {from=Int} {to=Bits64} <$> randomIO
   _ <- runStateT (seed1,seed2) $ do
-    r <- for [1..20] (\_ => stochasticXor params)
-    printLn (sum r)
+    r <- for [1 .. runs] (\_ => stochasticXor params)
+    pure () -- printLn (sum r)
   pure ()
 
 export
 runTest : IO ()
-runTest = runStochastic defaultStochasticEval
+runTest = runStochastic 1 defaultStochasticEval
 
 
 main : IO ()
-main = runStochastic defaultStochasticEval
+main = runStochastic 1 $ record {batch = 4, parentsCount = 15, maxEvaluations = 5} defaultStochasticEval
