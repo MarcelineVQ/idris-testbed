@@ -6,6 +6,11 @@ import Data.IOArray.Prims
 import Data.Fin
 import public Data.Nat
 
+import Decidable.Equality
+import JSON
+import Generics.Derive
+%language ElabReflection
+
 -- export
 -- record SIOMatrix (width : Nat) (height : Nat) a where
 --   constructor MkSIOMatrix
@@ -143,17 +148,46 @@ vectMult' mat arr = case mat of
     colLoop r (S c) = do
       let 0 p = lteSuccLeft prf2
       mv <- read mat r c
-      av <- readArray arr c
+      av <- readArray' arr c
       [| pure (av * mv) :: colLoop r c {prf2 = p} |]
     rowLoop : (r : Nat) -> (w'' : Nat) -> (0 prf1 : LTE r h) => (0 prf2 : LTE w'' w) => SIOArray h a -> io ()
     rowLoop 0 w'' arr' = pure ()
     rowLoop (S k) w'' arr = do
         let 0 p = lteSuccLeft prf1
         updrow <- colLoop k w''
-        writeArray arr k (sum updrow)
+        mutableWriteArray arr k (sum updrow)
+        rowLoop k w'' arr
+
+export
+vectMult'' : Num a => SIOMatrix h w a -> SIOArray w a -> SIOArray h a
+vectMult'' mat arr = unsafePerformIO $ case mat of
+    MkSIOMatrix h w _ _ _ => do
+      arrr <- newArray h 0
+      rowLoop h w arrr {prf1 = fef h} {prf2 = fef w}
+      pure arrr
+  where
+    colLoop : (r : Nat) -> (c : Nat) -> (0 prf1 : LTE r h) => (0 prf2 : LTE c w) => IO (List a)
+    colLoop r 0 = pure []
+    colLoop r (S c) = do
+      let 0 p = lteSuccLeft prf2
+      mv <- read mat r c
+      av <- readArray' arr c
+      [| pure (av * mv) :: colLoop r c {prf2 = p} |]
+    rowLoop : (r : Nat) -> (w'' : Nat) -> (0 prf1 : LTE r h) => (0 prf2 : LTE w'' w) => SIOArray h a -> IO ()
+    rowLoop 0 w'' arr' = pure ()
+    rowLoop (S k) w'' arr = do
+        let 0 p = lteSuccLeft prf1
+        updrow <- colLoop k w''
+        mutableWriteArray arr k (sum updrow)
         rowLoop k w'' arr
 
 infixl 3 #>
+infixl 3 ##>
+
+export
+%inline
+(##>) : (Num a) => SIOMatrix h w a -> SIOArray w a -> SIOArray h a
+(##>) = vectMult''
 
 export
 %inline
@@ -169,3 +203,19 @@ export
 prettyMatrix : Show a => SIOMatrix h w a -> String
 prettyMatrix m = show $ unsafePerformIO $ toList m
 
+export
+ToJSON a => ToJSON (SIOMatrix h w a) where
+  toJSON = toJSON . unsafePerformIO . toList
+
+-- export
+-- FromJSON a => FromJSON (s : Nat ** SIOArray s a) where
+--   fromJSON = map fromList'' . fromJSON
+-- 
+-- export
+-- {s:_} -> FromJSON a => FromJSON (SIOArray s a) where
+--   fromJSON x = do
+--     xs <- fromJSON {a=List a} x
+--     case decEq (length xs) s of
+--       (No contra) => fail "List length not correct, expected \{show s} got \{show (length xs)}"
+--       (Yes Refl) => Right $ fromList''' xs
+-- 

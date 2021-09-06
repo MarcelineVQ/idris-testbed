@@ -234,10 +234,10 @@ getCandles' sql = do
       | Left err => putStrLn "db open error" *> pure []
     Right stmt <- managedStmt db sql
       | Left err => putStrLn "stmt make error" *> pure []
-    sqlCmd db "begin;"
+    -- sqlCmd db "begin;"
     Right r <- liftIO $ fetchRows stmt
       | Left err => putStrLn "row get error" *> pure []
-    sqlCmd db "end;"
+    -- sqlCmd db "end;"
     pure r
 
 export
@@ -294,6 +294,7 @@ fetchAllFrom' inst gran from count = runEitherT {m = Managed} $ do
           | _ => pure ()
         liftIO $ usleep 100000
         MkEitherT $ fetchAllFrom' inst gran (MkDateTime (timeFrom from')) count
+-- "2010-01-01T00:00:00.000000000Z"
 
 export
 doFetchAllFrom : InstrumentName -> CandlestickGranularity -> DateTime -> Integer -> IO ()

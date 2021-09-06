@@ -3,24 +3,25 @@ module Num.Floating
 -- Probably overzelous with these constraints, this is all in service of making
 -- working with arrays/matrices easier.
 public export
-interface (FromDouble a, Neg a, Fractional a) => Floating a where
-  pi : a
-  euler : a
-  exp : a -> a
-  log : a -> a
-  pow : a -> a -> a
-  sin : a -> a
-  cos : a -> a
-  tan : a -> a
-  asin : a -> a
-  acos : a -> a
-  atan : a -> a
-  sinh : a -> a
-  cosh : a -> a
-  tanh : a -> a
-  sqrt : a -> a
-  floor : a -> a
-  ceiling : a -> a
+interface (FromDouble ty, Neg ty, Fractional ty) => Floating ty where
+  constructor MkFloating
+  pi : ty
+  euler : ty
+  exp : ty -> ty
+  log : ty -> ty
+  pow : ty -> ty -> ty
+  sin : ty -> ty
+  cos : ty -> ty
+  tan : ty -> ty
+  asin : ty -> ty
+  acos : ty -> ty
+  atan : ty -> ty
+  sinh : ty -> ty
+  cosh : ty -> ty
+  tanh : ty -> ty
+  sqrt : ty -> ty
+  floor : ty -> ty
+  ceiling : ty -> ty
 
 export
 Floating Double where
@@ -37,7 +38,7 @@ Floating Double where
   atan x = prim__doubleATan x
   sinh x = (exp x - exp (-x)) / 2
   cosh x = (exp x + exp (-x)) / 2
-  tanh x = sinh x / cosh x
+  tanh x = sinh x / cosh x -- can this NaN via cosh = 0?
   sqrt x = prim__doubleSqrt x
   floor x = prim__doubleFloor x
   ceiling x = prim__doubleCeiling x

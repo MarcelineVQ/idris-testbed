@@ -3,6 +3,8 @@ module Net.Types
 import public Data.Strong.IOMatrix
 import public Data.Strong.IOArray
 
+import Net.Activation
+
 import JSON
 import Generics.Derive
 %language ElabReflection
@@ -15,6 +17,7 @@ DArray n = SIOArray n Double
 public export
 record Weights (i : Nat) (o : Nat) where
   constructor MkWeights
+  funs : SIOArray o Activation
   wBias : SIOArray o Double
   wNodes : SIOMatrix o i Double
 
@@ -42,7 +45,7 @@ fitness (MkGenome _ f) = f
 
 export
 prettyWeights : Weights i o -> String
-prettyWeights (MkWeights wBias wNodes) = prettyMatrix wNodes ++ "\n" ++ prettyArray wBias ++ "\n\n"
+prettyWeights (MkWeights funs wBias wNodes) = prettyMatrix wNodes ++ "\n" ++ prettyArray wBias ++ "\n" ++ prettyArray funs
 
 export
 prettyNet : Network i hs o -> String

@@ -1,4 +1,4 @@
-module Data.Strong.IOArray
+module Data.Strong.Array
 
 import Data.IOArray.Prims
 import Data.Fin
@@ -17,17 +17,19 @@ import JSON
 import Generics.Derive
 %language ElabReflection
 
+{-
+
 -- An IOArray of exact aent count
 
 -- Not sure how else to extract size while retaining relation without exposing
 -- constructor for casing
 public export
-data SIOArray : Nat -> Type -> Type where
-  MkSIOArray : (size : Nat) -> (intSize : Int) -> (content : ArrayData a) -> SIOArray size a
+data Array : Nat -> Type -> Type where
+  MkArray : (size : Nat) -> (intSize : Int) -> (content : ArrayData a) -> Array size a
 
 -- I feel like s could allow for eason fusion, by determinig our final size upfront
 
--- %runElab derive "SIOArray" [Generic,Meta] I can't sop/generic elab this
+-- %runElab derive "Array" [Generic,Meta] I can't sop/generic elab this
 -- because it doesn't support indexed types that hold the index, e.g. size : Nat
 -- above. We'll go to list instead for json.
 
@@ -39,39 +41,40 @@ data SIOArray : Nat -> Type -> Type where
 lteReflexive j = reflexive {x=j}
 
 export
-size : SIOArray s a -> Int
-size (MkSIOArray s intSize content) = intSize
+size : Array s a -> Int
+size (MkArray s intSize content) = intSize
 
-content : SIOArray s a -> ArrayData a
-content (MkSIOArray s intSize c) = c
-
-export
-unsafeNewArray : HasIO io => (s : Nat) -> io (SIOArray s a)
-unsafeNewArray s = do
-  let intsize = cast s
-  arr <- primIO (prim__newArray intsize (believe_me (the Int 0)))
-  pure (MkSIOArray s intsize arr)
+content : Array s a -> ArrayData a
+content (MkArray s intSize c) = c
 
 export
-newArray : HasIO io => (s : Nat) -> (def : a) -> io (SIOArray s a)
-newArray s x = let intsize = cast s
-               in pure (MkSIOArray s intsize !(primIO (prim__newArray intsize x)))
+newArray : (s : Nat) -> (def : a) -> Array s a
+newArray s x = unsafePerformIO $ do
+    let intsize = cast s
+    pure (MkArray s intsize !(primIO (prim__newArray intsize x)))
 
 export
-newArray' : HasIO io => {s:_} -> (def : a) -> io (SIOArray s a)
-newArray' x = let intsize = cast s
-              in pure (MkSIOArray s intsize !(primIO (prim__newArray intsize x)))
+newArray' : {s:_} -> (def : a) -> Array s a
+newArray' = newArray s
 
 export
-newArrayCopy : HasIO io => SIOArray s a -> io (SIOArray s a)
-newArrayCopy (MkSIOArray s i contents) = do
-    new <- unsafeNewArray s
+newUnintializedArray : (s : Nat) -> Array s a
+newUnintializedArray s = newArray s (believe_me (the Int 0))
+
+export
+newUnintializedArray' : {s : Nat} -> Array s a
+newUnintializedArray' = newUnintializedArray s
+
+export
+newArrayCopy : Array s a -> Array s a
+newArrayCopy (MkArray s i contents) = unsafePerformIO $ do
+    let new = newUnintializedArray s
     copyFrom contents (content new) (i - 1)
     pure new
   where
     copyFrom : ArrayData elem ->
                ArrayData elem ->
-               Int -> io ()
+               Int -> IO ()
     copyFrom old new pos
         = if pos < 0
              then pure ()
@@ -80,115 +83,134 @@ newArrayCopy (MkSIOArray s i contents) = do
                      copyFrom old new $ assert_smaller pos (pos - 1)
 
 export
-unsafeMutableWriteArray : HasIO io => SIOArray s a -> (i : Nat) -> a -> io ()
+unsafeMutableWriteArray : HasIO io => Array s a -> (i : Nat) -> a -> io ()
 unsafeMutableWriteArray arr i x = primIO (prim__arraySet (content arr) (cast i) x)
 
 export
-mutableWriteArray : HasIO io => SIOArray s a -> (i : Nat) -> (0 prf : LTE i s) => a -> io ()
+mutableWriteArray : HasIO io => Array s a -> (i : Nat) -> (0 prf : LTE i s) => a -> io ()
 mutableWriteArray arr i x = unsafeMutableWriteArray arr i x
 
 export
 ||| Don't use this unless you really just have one infrequent thing to change,
 ||| unsafeWriteArray copies the array every use.
-unsafeWriteArray : SIOArray s a -> (i : Nat) -> a -> SIOArray s a
+unsafeWriteArray : Array s a -> (i : Nat) -> a -> Array s a
 unsafeWriteArray arr i x = unsafePerformIO $ do
-  new <- newArrayCopy arr
+  let new = newArrayCopy arr
   unsafeMutableWriteArray new i x
   pure new
 
 export
 ||| Don't use this unless you really just have one infrequent thing to change,
 ||| writeArray copies the array every use.
-writeArray : SIOArray s a -> (i : Nat) -> (0 prf : LTE i s) => a -> SIOArray s a
+writeArray : Array s a -> (i : Nat) -> (0 prf : LTE i s) => a -> Array s a
 writeArray arr i x = unsafeWriteArray arr i x
 
 
 -- unsafeReadArray doesn't enforce a bounds check
 
--- primed versions for io ordering/convenience
 export
-unsafeReadArray' : HasIO io => SIOArray s a -> (i : Nat) -> io a
-unsafeReadArray' arr i = primIO (prim__arrayGet (content arr) (cast i))
+||| To match with unsafeMutableWriteArray in that it has io for
+||| ordering ease-of-use, 'mutable' in name only.
+unsafeMutableReadArray : HasIO io => Array s a -> (i : Nat) -> io a
+unsafeMutableReadArray arr i = primIO (prim__arrayGet (content arr) (cast i))
 
 export
-unsafeReadArray : SIOArray s a -> (i : Nat) -> a
-unsafeReadArray arr i = unsafePerformIO $ unsafeReadArray' arr i
-
--- primed versions for io ordering/convenience
-export
-readArray' : HasIO io => SIOArray s a -> (i : Nat) -> (0 prf : LTE i s) => io a
-readArray' arr i = primIO (prim__arrayGet (content arr) (cast i))
+unsafeReadArray : Array s a -> (i : Nat) -> a
+unsafeReadArray arr i = unsafePerformIO $ unsafeMutableReadArray arr i
 
 export
-readArray : SIOArray s a -> (i : Nat) -> (0 prf : LTE i s) => a
-readArray arr i = unsafePerformIO $ readArray' arr i
+||| To match with unsafeMutableWriteArray in that it has io for
+||| ordering ease-of-use, 'mutable' in name only.
+mutableReadArray : HasIO io => Array s a -> (i : Nat) -> (0 prf : LTE i s) => io a
+mutableReadArray arr i = unsafeMutableReadArray arr i
 
 export
-modifyArray : HasIO io => (a -> a) -> SIOArray s a -> (i : Nat) -> LTE i s => SIOArray s a
+readArray : Array s a -> (i : Nat) -> (0 prf : LTE i s) => a
+readArray arr i = unsafeReadArray arr i
+
+export
+modifyArray : HasIO io => (a -> a) -> Array s a -> (i : Nat) -> LTE i s => Array s a
 modifyArray f arr i = writeArray arr i (f (readArray arr i))
 
-export
-newArrayFillM : HasIO io => (s : Nat) -> (Nat -> io a) -> io (SIOArray s a)
-newArrayFillM s g = do
-      new <- unsafeNewArray {a} s
-      case new of
-        MkSIOArray s _ _ => do
-          let 0 prf = lteReflexive s
-          go new s
-          pure new
-  where
-    go : SIOArray s a -> (i : Nat) -> (0 prf : LTE i s) => io ()
-    go new 0 = pure ()
-    go new (S k) = do 
-      let 0 newprf = lteSuccLeft prf
-      mutableWriteArray new k !(g k)
-      go new k
+-- export
+-- imapArrayM : Monad m => ((i : Nat) -> a -> m b) -> Array s a -> m (Array s b)
+-- imapArrayM f arr = case arr of
+--     MkArray s _ _ => do
+--       let new = newUnintializedArray {a=b} s
+--       let 0 prf = lteReflexive s
+--       go new s
+--   where
+--     go : Array s b -> (i : Nat) -> (0 prf : LTE i s) => m (Array s b)
+--     go new 0 = pure new
+--     go new (S k) = do
+--       let 0 newprf = lteSuccLeft prf
+--       let v = readArray arr k
+--       r <- f k v
+--       let new' = unsafePerformIO $ mutableWriteArray new k r
+--       go new' k
+
+
 
 export
-foldlArray : HasIO io => (b -> a -> b) -> b -> SIOArray s a -> io b
+newArrayFillM : Monad m => (s : Nat) -> (Nat -> m a) -> m (Array s a)
+newArrayFillM s g = do
+      let new = unsafeNewArray {a} s
+      case new of
+        MkArray s _ _ => do
+          let 0 prf = lteReflexive s
+          go new s
+  where
+    go : Array s a -> (i : Nat) -> (0 prf : LTE i s) => m (Array s a)
+    go new 0 = pure new
+    go new (S k) = do
+      let 0 newprf = lteSuccLeft prf
+      go (writeArray new k !(g k)) k
+
+export
+foldlArray : HasIO io => (b -> a -> b) -> b -> Array s a -> io b
 foldlArray f acc arr = case arr of
-    MkSIOArray s _ _ => let 0 prf = lteReflexive s in go s
+    MkArray s _ _ => let 0 prf = lteReflexive s in go s
   where
     go : (i : Nat) -> (0 prf : LTE i s) => io b
     go 0 = pure acc
     go (S k) = let 0 p = lteSuccLeft prf in [| f (go k) (readArray' arr k) |]
 
 export
-foldMapArray : (HasIO io, Monoid b) => (a -> b) -> SIOArray s a -> io b
+foldMapArray : (HasIO io, Monoid b) => (a -> b) -> Array s a -> io b
 foldMapArray f arr = case arr of
-    MkSIOArray s _ _ => let 0 prf = lteReflexive s in go s
+    MkArray s _ _ => let 0 prf = lteReflexive s in go s
   where
     go : (i : Nat) -> (0 prf : LTE i s) => io b
     go 0 = f <$> readArray' arr 0
     go (S k) = let 0 p = lteSuccLeft prf in [| (f <$> readArray' arr k) <+> go k |]
 
 export
-mapArray : HasIO io => (a -> b) -> SIOArray s a -> io (SIOArray s b)
+mapArray : HasIO io => (a -> b) -> Array s a -> io (Array s b)
 mapArray f arr = case arr of
-    MkSIOArray s _ _ => do
+    MkArray s _ _ => do
       new <- unsafeNewArray {a=b} s
       let 0 prf = lteReflexive s
       go new s
       -- pure new
   where
-    go : SIOArray s b -> (i : Nat) -> (0 prf : LTE i s) => io (SIOArray s b)
+    go : Array s b -> (i : Nat) -> (0 prf : LTE i s) => io (Array s b)
     go new 0 = pure new
     go new (S k) = do
       let 0 newprf = lteSuccLeft prf
       v <- readArray' arr k
       mutableWriteArray new k (f v)
       go new k
-
+{-
 export
-mapArray'' : HasIO io => (a -> b) -> SIOArray s a -> io (SIOArray s b)
+mapArray'' : HasIO io => (a -> b) -> Array s a -> io (Array s b)
 mapArray'' f arr1 = case arr1 of
-    MkSIOArray s _ _ => do
+    MkArray s _ _ => do
       new <- unsafeNewArray {a=b} s
       let 0 prf = lteReflexive s
       go new s
       pure new
   where
-    go : SIOArray s b -> (i : Nat) -> (0 prf : LTE i s) => io ()
+    go : Array s b -> (i : Nat) -> (0 prf : LTE i s) => io ()
     go new 0 = pure ()
     go new (S k) = do
       let 0 newprf = lteSuccLeft prf
@@ -197,15 +219,15 @@ mapArray'' f arr1 = case arr1 of
       go new k
 
 export
-mapArray' : (a -> b) -> SIOArray s a -> SIOArray s b
+mapArray' : (a -> b) -> Array s a -> Array s b
 mapArray' f arr = unsafePerformIO $ case arr of
-    MkSIOArray s _ _ => do
+    MkArray s _ _ => do
       new <- unsafeNewArray {a=b} s
       let 0 prf = lteReflexive s
       go new s
       pure new
   where
-    go : SIOArray s b -> (i : Nat) -> (0 prf : LTE i s) => IO ()
+    go : Array s b -> (i : Nat) -> (0 prf : LTE i s) => IO ()
     go new 0 = pure ()
     go new (S k) = do
       let 0 newprf = lteSuccLeft prf
@@ -214,19 +236,19 @@ mapArray' f arr = unsafePerformIO $ case arr of
       go new k
 
 export
-Functor (SIOArray s) where
+Functor (Array s) where
   map = mapArray'
 
 export
-imapArrayM : HasIO io => ((i : Nat) -> a -> io b) -> SIOArray s a -> io (SIOArray s b)
+imapArrayM : HasIO io => ((i : Nat) -> a -> io b) -> Array s a -> io (Array s b)
 imapArrayM f arr = case arr of
-    MkSIOArray s _ _ => do
+    MkArray s _ _ => do
       new <- unsafeNewArray {a=b} s
       let 0 prf = lteReflexive s
       go new s
       pure new
   where
-    go : SIOArray s b -> (i : Nat) -> (0 prf : LTE i s) => io ()
+    go : Array s b -> (i : Nat) -> (0 prf : LTE i s) => io ()
     go new 0 = pure ()
     go new (S k) = do
       let 0 newprf = lteSuccLeft prf
@@ -235,15 +257,15 @@ imapArrayM f arr = case arr of
       go new k
 
 export
-zipWithArray : HasIO io => (a -> b -> c) -> SIOArray s a -> SIOArray s b -> io (SIOArray s c)
+zipWithArray : HasIO io => (a -> b -> c) -> Array s a -> Array s b -> io (Array s c)
 zipWithArray f arr1 arr2 = case arr1 of
-    MkSIOArray s _ _ => do
+    MkArray s _ _ => do
       new <- unsafeNewArray {a=c} s
       let 0 prf = lteReflexive s
       go new s
       pure new
   where
-    go : SIOArray s c -> (i : Nat) -> (0 prf : LTE i s) => io ()
+    go : Array s c -> (i : Nat) -> (0 prf : LTE i s) => io ()
     go new 0 = pure ()
     go new (S k) = do
       let 0 newprf = lteSuccLeft prf
@@ -253,24 +275,24 @@ zipWithArray f arr1 arr2 = case arr1 of
       go new k
 
 export
-toList : HasIO io => SIOArray s a -> io (List a)
+toList : HasIO io => Array s a -> io (List a)
 toList = foldlArray (\b,a => b ++ [a]) []
 
 export
-foldlArray' : (b -> a -> b) -> b -> SIOArray s a -> b
+foldlArray' : (b -> a -> b) -> b -> Array s a -> b
 foldlArray' f acc arr = case arr of
-    MkSIOArray s _ _ => let 0 prf = lteReflexive s in go s
+    MkArray s _ _ => let 0 prf = lteReflexive s in go s
   where
     go : (i : Nat) -> (0 prf : LTE i s) => b
     go 0 = acc
     go (S k) = let 0 p = lteSuccLeft prf in f (go k) (readArray arr k)
 
 export
-toList' : SIOArray s a -> List a
+toList' : Array s a -> List a
 toList' xs = foldlArray' (\b,a => b . (a ::)) id xs []
 
 export
-fromList : HasIO io => (xs : List a) -> io (SIOArray (length xs) a)
+fromList : HasIO io => (xs : List a) -> io (Array (length xs) a)
 fromList xs with (length xs)
   fromList xs | s = do
       new <- unsafeNewArray {a} s
@@ -278,7 +300,7 @@ fromList xs with (length xs)
       go new (reverse xs) s
       pure new
   where
-    go : SIOArray s a -> (xs : List a) -> (i : Nat) -> (0 prf : LTE i s) => io ()
+    go : Array s a -> (xs : List a) -> (i : Nat) -> (0 prf : LTE i s) => io ()
     go new (x :: xs) (S k) = do
       let 0 newprf = lteSuccLeft prf
       mutableWriteArray new k x
@@ -287,7 +309,7 @@ fromList xs with (length xs)
 
 -- the length + reversing is slowish, merge the op? build up a chain of writes to execute after length is known?
 export
-fromList' : HasIO io => (xs : List a) -> io (s : Nat ** SIOArray s a)
+fromList' : HasIO io => (xs : List a) -> io (s : Nat ** Array s a)
 fromList' xs = do
     let s = length xs
     new <- unsafeNewArray {a} s
@@ -295,7 +317,7 @@ fromList' xs = do
     go new (reverse xs) s
     pure (s ** new)
   where
-    go : SIOArray s a -> (xs : List a) -> (i : Nat) -> (0 prf : LTE i s) => io ()
+    go : Array s a -> (xs : List a) -> (i : Nat) -> (0 prf : LTE i s) => io ()
     go new (x :: xs) (S k) = do
       let 0 newprf = lteSuccLeft prf
       mutableWriteArray new k x
@@ -304,55 +326,55 @@ fromList' xs = do
 
 -- the length + reversing is slowish, merge the op? build up a chain of writes to execute after length is known?
 export
-fromList'' : (xs : List a) -> (s : Nat ** SIOArray s a)
+fromList'' : (xs : List a) -> (s : Nat ** Array s a)
 fromList'' xs = unsafePerformIO $ fromList' xs
 
 export
-fromList''' : (xs : List a) -> SIOArray (length xs) a
+fromList''' : (xs : List a) -> Array (length xs) a
 fromList''' xs = unsafePerformIO $ fromList xs
 
 export
-prettyArray : Show a => SIOArray s a -> String
+prettyArray : Show a => Array s a -> String
 prettyArray x = show (toList' x)
 
 export
-Show a => Show (SIOArray s a) where
+Show a => Show (Array s a) where
   show x = "fromList " ++ prettyArray x
 
 export
 %inline
-pointwise' : HasIO io => Num a => SIOArray s (a -> b) -> SIOArray s a -> io (SIOArray s b)
+pointwise' : HasIO io => Num a => Array s (a -> b) -> Array s a -> io (Array s b)
 pointwise' = zipWithArray (\f,x => f x)
 
 export
 %inline
-pointwise : HasIO io => Num a => SIOArray s a -> SIOArray s a -> io (SIOArray s a)
+pointwise : HasIO io => Num a => Array s a -> Array s a -> io (Array s a)
 pointwise = zipWithArray (+)
 
 export
 %inline
-(+) : HasIO io => Num a => SIOArray s a -> SIOArray s a -> io (SIOArray s a)
+(+) : HasIO io => Num a => Array s a -> Array s a -> io (Array s a)
 (+) = pointwise
 
 export
-sumArray : HasIO io => Num a => SIOArray s a -> io a
+sumArray : HasIO io => Num a => Array s a -> io a
 sumArray = foldlArray (+) 0
 
 export
-dotArray : HasIO io => Num a => SIOArray s a -> SIOArray s a -> io a
+dotArray : HasIO io => Num a => Array s a -> Array s a -> io a
 dotArray a b = sumArray !(zipWithArray (*) a b)
 
 
 export
-ToJSON a => ToJSON (SIOArray s a) where
+ToJSON a => ToJSON (Array s a) where
   toJSON = toJSON . toList'
 
 export
-FromJSON a => FromJSON (s : Nat ** SIOArray s a) where
+FromJSON a => FromJSON (s : Nat ** Array s a) where
   fromJSON = map fromList'' . fromJSON
 
 export
-{s:_} -> FromJSON a => FromJSON (SIOArray s a) where
+{s:_} -> FromJSON a => FromJSON (Array s a) where
   fromJSON x = do
     xs <- fromJSON {a=List a} x
     case decEq (length xs) s of
@@ -360,7 +382,7 @@ export
       (Yes Refl) => Right $ fromList''' xs
     
 
-
+-}
 
 
 
@@ -375,19 +397,19 @@ export
 -- ----------- Num
 -- 
 -- -- export
--- (+) : Num a => SIOArray s a -> SIOArray s a -> SIOArray s a
+-- (+) : Num a => Array s a -> Array s a -> Array s a
 -- x + y = unsafePerformIO $ zipWithArray (+) x y
 -- 
 -- -- export
--- (*) : Num a => SIOArray s a -> SIOArray s a -> SIOArray s a
+-- (*) : Num a => Array s a -> Array s a -> Array s a
 -- x * y = unsafePerformIO $ zipWithArray (*) x y
 -- 
 -- -- export
--- fromInteger : Num a => (s:_) => Integer -> SIOArray s a
+-- fromInteger : Num a => (s:_) => Integer -> Array s a
 -- -- fromInteger x = unsafePerformIO $ newArray' (fromInteger x)
 -- fromInteger x = unsafePerformIO $ newArray' (fromInteger x)
 -- 
--- Num a => (s : Nat) => Num (SIOArray s a) where
+-- Num a => (s : Nat) => Num (Array s a) where
 --  (*) = IOArray.(*)
 --  (+) = IOArray.(+)
 --  fromInteger x = unsafePerformIO $ newArray' (fromInteger x)
@@ -395,27 +417,27 @@ export
 -- ----------- Fractional
 -- 
 -- export
--- (/) : Fractional a => SIOArray s a -> SIOArray s a -> SIOArray s a
+-- (/) : Fractional a => Array s a -> Array s a -> Array s a
 -- x / y = unsafePerformIO $ zipWithArray (/) x y
--- -- recip : Fractional a => SIOArray s a -> SIOArray s a
+-- -- recip : Fractional a => Array s a -> Array s a
 -- 
 -- ----------- FromDouble
 -- 
 -- export
--- fromDouble : FromDouble a => {s:_} -> a -> SIOArray s a
+-- fromDouble : FromDouble a => {s:_} -> a -> Array s a
 -- fromDouble x = ?dfsdsdds --unsafePerformIO $ newArray' (fromDouble x)
 -- 
 -- ----------- Neg
 -- 
 -- export
--- negate : Neg a => SIOArray s a -> SIOArray s a
+-- negate : Neg a => Array s a -> Array s a
 -- negate x = unsafePerformIO $ mapArray negate x
--- (-) : Neg a => SIOArray s a -> SIOArray s a -> SIOArray s a
+-- (-) : Neg a => Array s a -> Array s a -> Array s a
 -- x - y = unsafePerformIO $ zipWithArray (-) x y
 -- 
 -- ----------- Floating
 -- 
--- Floating a => Floating (SIOArray s a) where
+-- Floating a => Floating (Array s a) where
 --   exp x = unsafePerformIO $ mapArray exp x
 --   pi = ?fsfsd
 --   euler = ?fsdfddds
@@ -438,69 +460,69 @@ export
 -- 
 -- -- 
 -- -- export
--- -- pi : FromDouble a => {s:_} -> SIOArray s a
+-- -- pi : FromDouble a => {s:_} -> Array s a
 -- -- pi = unsafePerformIO $ newArray' (fromDouble 3.14159265358979323846)
 -- -- 
 -- -- export
--- -- euler : FromDouble a => {s:_} -> SIOArray s a
+-- -- euler : FromDouble a => {s:_} -> Array s a
 -- -- euler = unsafePerformIO $ newArray' (fromDouble 2.7182818284590452354)
 -- -- 
 -- -- export
--- -- exp : Floating a => SIOArray s a -> SIOArray s a
+-- -- exp : Floating a => Array s a -> Array s a
 -- -- exp x = unsafePerformIO $ mapArray exp x
 -- -- 
 -- -- export
--- -- log : Floating a => SIOArray s a -> SIOArray s a
+-- -- log : Floating a => Array s a -> Array s a
 -- -- log x = unsafePerformIO $ mapArray log x
 -- -- 
 -- -- export
--- -- pow : Floating a => SIOArray s a -> SIOArray s a -> SIOArray s a
+-- -- pow : Floating a => Array s a -> Array s a -> Array s a
 -- -- pow x y = unsafePerformIO $ zipWithArray pow x y
 -- -- 
 -- -- export
--- -- sin : Floating a => SIOArray s a -> SIOArray s a
+-- -- sin : Floating a => Array s a -> Array s a
 -- -- sin x = unsafePerformIO $ mapArray sin x
 -- -- 
 -- -- export
--- -- cos : Floating a => SIOArray s a -> SIOArray s a
+-- -- cos : Floating a => Array s a -> Array s a
 -- -- cos x = unsafePerformIO $ mapArray cos x
 -- -- 
 -- -- export
--- -- tan : Floating a => SIOArray s a -> SIOArray s a
+-- -- tan : Floating a => Array s a -> Array s a
 -- -- tan x = unsafePerformIO $ mapArray tan x
 -- -- 
 -- -- export
--- -- asin : Floating a => SIOArray s a -> SIOArray s a
+-- -- asin : Floating a => Array s a -> Array s a
 -- -- asin x = unsafePerformIO $ mapArray asin x
 -- -- 
 -- -- export
--- -- acos : Floating a => SIOArray s a -> SIOArray s a
+-- -- acos : Floating a => Array s a -> Array s a
 -- -- acos x = unsafePerformIO $ mapArray acos x
 -- -- 
 -- -- export
--- -- atan : Floating a => SIOArray s a -> SIOArray s a
+-- -- atan : Floating a => Array s a -> Array s a
 -- -- atan x = unsafePerformIO $ mapArray atan x
 -- -- 
 -- -- export
--- -- sinh : Floating a => SIOArray s a -> SIOArray s a
+-- -- sinh : Floating a => Array s a -> Array s a
 -- -- sinh x = unsafePerformIO $ mapArray sinh x
 -- -- 
 -- -- export
--- -- cosh : Floating a => SIOArray s a -> SIOArray s a
+-- -- cosh : Floating a => Array s a -> Array s a
 -- -- cosh x = unsafePerformIO $ mapArray cosh x
 -- -- 
 -- -- export
--- -- tanh : Floating a => SIOArray s a -> SIOArray s a
+-- -- tanh : Floating a => Array s a -> Array s a
 -- -- tanh x = unsafePerformIO $ mapArray tanh x
 -- -- 
 -- -- export
--- -- sqrt : Floating a => SIOArray s a -> SIOArray s a
+-- -- sqrt : Floating a => Array s a -> Array s a
 -- -- sqrt x = unsafePerformIO $ mapArray sqrt x
 -- -- 
 -- -- export
--- -- floor : Floating a => SIOArray s a -> SIOArray s a
+-- -- floor : Floating a => Array s a -> Array s a
 -- -- floor x = unsafePerformIO $ mapArray floor x
 -- -- 
 -- -- export
--- -- ceiling : Floating a => SIOArray s a -> SIOArray s a
+-- -- ceiling : Floating a => Array s a -> Array s a
 -- -- ceiling x = unsafePerformIO $ mapArray ceiling x
