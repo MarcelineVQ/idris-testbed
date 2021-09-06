@@ -8,7 +8,7 @@ import Generics.Derive
 %language ElabReflection
 
 public export
-data Activation = Sigmoid | Sigmoid' | Relu | LeakyRelu | Tanh | Swish
+data Activation = Sigmoid | Sigmoid' | Relu | LeakyRelu | Tanh | Swish | Negate
 
 %runElab derive "Activation" [Generic,Meta,Eq,Ord,Show]
 
@@ -57,7 +57,7 @@ swish x = x * sigmoid x
 export
 actList : List Activation
 -- actList = [Sigmoid, Sigmoid', Relu, LeakyRelu, Tanh, Swish]
-actList = [Sigmoid, Sigmoid', LeakyRelu, Swish]
+actList = [Sigmoid, Sigmoid', Relu, LeakyRelu, Swish, Negate]
 
 export
 %inline
@@ -68,3 +68,4 @@ actToFunc Relu = relu -- for some reason relu does weird-ass shit to nets, ignor
 actToFunc LeakyRelu = leakyRelu
 actToFunc Tanh = Num.Floating.tanh -- tanh is slow it seems like
 actToFunc Swish = swish
+actToFunc Negate = negate

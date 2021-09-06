@@ -17,6 +17,8 @@ import Net.Types
 
 import Data.List
 
+import TimeIt
+
 import Util
 
 -- I want to predict what x bars from now will be, lets say 10 bars
@@ -38,6 +40,12 @@ randomMat : HasIO io => (m,n : Nat) -> io (SIOMatrix m n Double)
 randomMat m n = newFillM (cast m) (cast n) (\_,_ => randWeight)
 
 export
+randomFun : HasIO io => io Activation
+randomFun = do
+  funs <- fromList actList
+  randomRead funs
+
+export
 randomFuns : HasIO io => (s : Nat) -> io (SIOArray s Activation)
 randomFuns s = do
   funs <- fromList actList
@@ -45,65 +53,44 @@ randomFuns s = do
 
 export
 randomWeights : HasIO io => (i,o : Nat) -> io (Weights i o)
-randomWeights i o = [| MkWeights (randomFuns o) (randomArr o) (randomMat o i) |]
+randomWeights i o = [| MkWeights (randomArr o) (randomMat o i) |]
 
 export
 randomWeights' : HasIO io => {i,o:_} -> io (Weights i o)
-randomWeights' = [| MkWeights (randomFuns o) (randomArr o) (randomMat o i) |]
+randomWeights' = [| MkWeights (randomArr o) (randomMat o i) |]
 
 export
 randomNet : HasIO io => (i : Nat) -> (hs : List Nat) -> (o : Nat) -> io (Network i hs o)
 randomNet i [] o = O <$> randomWeights i o
-randomNet i (h :: hs) o = [| L (randomWeights i h) (randomNet h hs o) |]
+randomNet i (h :: hs) o = [| L randomFun (randomWeights i h) (randomNet h hs o) |]
 
 ploos : Double -> Double
 ploos = sigmoid
 
 export
 runLayer : HasIO io => Weights i o -> SIOArray i Double -> io (SIOArray o Double)
-runLayer w@(MkWeights funs wB wN) v = do
-    -- putStr "inp: " *> printLn v
-    -- putStr "weights: " *> putStrLn (prettyWeights w)
-    mat <- wN #> v
-    -- putStr "mat: " *> printLn mat
-    plus <- wB + mat
-    -- putStr "plus: " *> printLn plus
-    funs' <- mapArray actToFunc funs
-    -- putStr "mapArray: " *> printLn funs'
-    r <- zipWithArray (\f,x => f x) funs' plus
-    -- putStr "zipWithArray: " *> printLn r
-    pure r
--- ^ this is taking my weights and spitting them out
+runLayer w v = do
+    mat <- {- timeIt "array mult" $ -} (wNodes w) #> v
+    plus <- {- timeIt "array plus" $ -} (wBias w) + mat
+    pure plus
+-- -- ^ this is taking my weights and spitting them out
 
 export
-runLayer'' : HasIO io => Weights i o -> SIOArray i Double -> io (SIOArray o Double)
-runLayer'' (MkWeights funs wB wN) v = wB + !(wN #> v)
-
--- export
--- runLayer' : Weights i o -> SIOArray i Double -> SIOArray o Double
--- runLayer' (MkWeights funs wB wN) v = wB + (wN ##> v)
-
-export
-runNet' : HasIO io => (Double -> Double) -> Network i hs o -> SIOArray i Double -> io (SIOArray o Double)
-runNet' f (O x) input = do
-  r <- runLayer'' x input
-  -- putStr "runNet O: " *> printLn r
+runNet' : HasIO io => Network i hs o -> SIOArray i Double -> io (SIOArray o Double)
+runNet' (O x) input = runLayer x input
+runNet' (L a x y) input = do
+  r <- runLayer x input
+  c <- mapArray (actToFunc a) r
+  r <- runNet' y c
   pure r
-runNet' f (L x y) input = do
-
-  z <- runLayer x input
-  -- putStr "runLayer S: " *> printLn z
-  c <- mapArray f z -- runLayer applies the relevant func
-  -- putStr "mapArray S: " *> printLn c
-  r <- runNet' f y z
-  -- putStr "runNet S: " *> printLn r
-  pure r
-  -- runNet' f y out
 
 export
 %inline
 runNet : HasIO io => Network i hs o -> SIOArray i Double -> io (SIOArray o Double)
-runNet = runNet' logistic
+runNet n inp = do
+  r <- runNet' n inp
+  -- putStr "runNet final: " *> printLn r
+  pure r
 
 export
 testRunNet : IO (SIOArray 1 Double)

@@ -54,3 +54,9 @@ randEnv act = do
   seed2 <- cast {from=Int} {to=Bits64} <$> randomIO
   _ <- runStateT (seed1,seed2) $ lift act
   pure ()
+
+infixl 4 &&|
+
+export
+(&&|) : Bool -> Bool -> Bool
+x &&| y = x && y

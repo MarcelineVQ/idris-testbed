@@ -12,6 +12,8 @@ import Data.List
 
 import System.Random
 
+import Util
+
 import Decidable.Equality
 import JSON
 import Generics.Derive
@@ -25,7 +27,7 @@ public export
 data SIOArray : Nat -> Type -> Type where
   MkSIOArray : (size : Nat) -> (intSize : Int) -> (content : ArrayData a) -> SIOArray size a
 
--- I feel like s could allow for eason fusion, by determinig our final size upfront
+-- I feel like s could allow for easier fusion, by determinig our final size upfront
 
 -- %runElab derive "SIOArray" [Generic,Meta] I can't sop/generic elab this
 -- because it doesn't support indexed types that hold the index, e.g. size : Nat
@@ -333,6 +335,10 @@ export
 %inline
 (+) : HasIO io => Num a => SIOArray s a -> SIOArray s a -> io (SIOArray s a)
 (+) = pointwise
+
+export
+arrEq : HasIO io => Eq a => SIOArray s a -> SIOArray s a -> io Bool
+arrEq x y = foldlArray (&&|) True =<< zipWithArray (==) x y
 
 export
 sumArray : HasIO io => Num a => SIOArray s a -> io a

@@ -20,12 +20,12 @@ import Generics.Derive
 
 -- convert nets to sql
 weightsToSQL : Weights i o -> String
-weightsToSQL (MkWeights _ wBias wNodes) = ?asDsfsdf --"W" ++ toList wBias ++ toList wNodes
+weightsToSQL (MkWeights wBias wNodes) = ?asDsfsdf --"W" ++ toList wBias ++ toList wNodes
 
 -- 
 networkToSQL : Network i hs o -> String
 networkToSQL (O x) = ?dsfe_1
-networkToSQL (L x y) = ?dsfe_2
+networkToSQL (L a x y) = ?dsfe_2
 
 -- L W [1,2,3] [[4,5,6],[10,11,12]] O [9,0]
 

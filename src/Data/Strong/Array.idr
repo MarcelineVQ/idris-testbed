@@ -5,6 +5,7 @@ import Data.Fin
 import public Data.Nat
 import Data.DPair
 
+import Control.Monad.Identity
 
 import Num.Floating
 
@@ -16,8 +17,6 @@ import Decidable.Equality
 import JSON
 import Generics.Derive
 %language ElabReflection
-
-{-
 
 -- An IOArray of exact aent count
 
@@ -129,178 +128,104 @@ readArray : Array s a -> (i : Nat) -> (0 prf : LTE i s) => a
 readArray arr i = unsafeReadArray arr i
 
 export
-modifyArray : HasIO io => (a -> a) -> Array s a -> (i : Nat) -> LTE i s => Array s a
+modifyArray : (a -> a) -> Array s a -> (i : Nat) -> LTE i s => Array s a
 modifyArray f arr i = writeArray arr i (f (readArray arr i))
 
--- export
--- imapArrayM : Monad m => ((i : Nat) -> a -> m b) -> Array s a -> m (Array s b)
--- imapArrayM f arr = case arr of
---     MkArray s _ _ => do
---       let new = newUnintializedArray {a=b} s
---       let 0 prf = lteReflexive s
---       go new s
---   where
---     go : Array s b -> (i : Nat) -> (0 prf : LTE i s) => m (Array s b)
---     go new 0 = pure new
---     go new (S k) = do
---       let 0 newprf = lteSuccLeft prf
---       let v = readArray arr k
---       r <- f k v
---       let new' = unsafePerformIO $ mutableWriteArray new k r
---       go new' k
-
-
-
 export
-newArrayFillM : Monad m => (s : Nat) -> (Nat -> m a) -> m (Array s a)
-newArrayFillM s g = do
-      let new = unsafeNewArray {a} s
-      case new of
-        MkArray s _ _ => do
-          let 0 prf = lteReflexive s
-          go new s
-  where
-    go : Array s a -> (i : Nat) -> (0 prf : LTE i s) => m (Array s a)
-    go new 0 = pure new
-    go new (S k) = do
-      let 0 newprf = lteSuccLeft prf
-      go (writeArray new k !(g k)) k
-
-export
-foldlArray : HasIO io => (b -> a -> b) -> b -> Array s a -> io b
-foldlArray f acc arr = case arr of
-    MkArray s _ _ => let 0 prf = lteReflexive s in go s
-  where
-    go : (i : Nat) -> (0 prf : LTE i s) => io b
-    go 0 = pure acc
-    go (S k) = let 0 p = lteSuccLeft prf in [| f (go k) (readArray' arr k) |]
-
-export
-foldMapArray : (HasIO io, Monoid b) => (a -> b) -> Array s a -> io b
-foldMapArray f arr = case arr of
-    MkArray s _ _ => let 0 prf = lteReflexive s in go s
-  where
-    go : (i : Nat) -> (0 prf : LTE i s) => io b
-    go 0 = f <$> readArray' arr 0
-    go (S k) = let 0 p = lteSuccLeft prf in [| (f <$> readArray' arr k) <+> go k |]
-
-export
-mapArray : HasIO io => (a -> b) -> Array s a -> io (Array s b)
-mapArray f arr = case arr of
-    MkArray s _ _ => do
-      new <- unsafeNewArray {a=b} s
-      let 0 prf = lteReflexive s
-      go new s
-      -- pure new
-  where
-    go : Array s b -> (i : Nat) -> (0 prf : LTE i s) => io (Array s b)
-    go new 0 = pure new
-    go new (S k) = do
-      let 0 newprf = lteSuccLeft prf
-      v <- readArray' arr k
-      mutableWriteArray new k (f v)
-      go new k
-{-
-export
-mapArray'' : HasIO io => (a -> b) -> Array s a -> io (Array s b)
-mapArray'' f arr1 = case arr1 of
-    MkArray s _ _ => do
-      new <- unsafeNewArray {a=b} s
-      let 0 prf = lteReflexive s
-      go new s
-      pure new
-  where
-    go : Array s b -> (i : Nat) -> (0 prf : LTE i s) => io ()
-    go new 0 = pure ()
-    go new (S k) = do
-      let 0 newprf = lteSuccLeft prf
-      v1 <- readArray' arr1 k
-      mutableWriteArray new k (f v1)
-      go new k
-
-export
-mapArray' : (a -> b) -> Array s a -> Array s b
-mapArray' f arr = unsafePerformIO $ case arr of
-    MkArray s _ _ => do
-      new <- unsafeNewArray {a=b} s
-      let 0 prf = lteReflexive s
-      go new s
-      pure new
-  where
-    go : Array s b -> (i : Nat) -> (0 prf : LTE i s) => IO ()
-    go new 0 = pure ()
-    go new (S k) = do
-      let 0 newprf = lteSuccLeft prf
-      v <- readArray' arr k
-      mutableWriteArray new k (f v)
-      go new k
-
-export
-Functor (Array s) where
-  map = mapArray'
-
-export
-imapArrayM : HasIO io => ((i : Nat) -> a -> io b) -> Array s a -> io (Array s b)
+imapArrayM : Monad m => ((i : Nat) -> a -> m b) -> Array s a -> m (Array s b)
 imapArrayM f arr = case arr of
     MkArray s _ _ => do
-      new <- unsafeNewArray {a=b} s
+      let new = newUnintializedArray {a=b} s
       let 0 prf = lteReflexive s
       go new s
-      pure new
   where
-    go : Array s b -> (i : Nat) -> (0 prf : LTE i s) => io ()
-    go new 0 = pure ()
+    go : Array s b -> (i : Nat) -> (0 prf : LTE i s) => m (Array s b)
+    go new 0 = pure new
     go new (S k) = do
       let 0 newprf = lteSuccLeft prf
-      v <- readArray' arr k
-      mutableWriteArray new k !(f k v)
+      let v = readArray arr k
+      r <- f k v
+      let () = unsafePerformIO $ mutableWriteArray new k r
       go new k
 
 export
-zipWithArray : HasIO io => (a -> b -> c) -> Array s a -> Array s b -> io (Array s c)
-zipWithArray f arr1 arr2 = case arr1 of
+imapArray : ((i : Nat) -> a -> b) -> Array s a -> Array s b
+imapArray f arr = runIdentity $ imapArrayM (Id .: f) arr
+
+
+-- extra copy, but easy to write
+export
+inewArrayFillM : Monad m => (s : Nat) -> ((i : Nat) -> m a) -> m (Array s a)
+inewArrayFillM s g = imapArrayM (\i,_ => g i) (newUnintializedArray {a} s)
+
+export
+inewArrayFill : (s : Nat) -> ((i : Nat) -> a) -> Array s a
+inewArrayFill s g = runIdentity $ imapArrayM (\i,_ => Id (g i)) (newUnintializedArray {a} s)
+
+
+export
+foldlArray : (b -> a -> b) -> b -> Array s a -> b
+foldlArray f acc arr = unsafePerformIO $ case arr of
+    MkArray s _ _ => let 0 prf = lteReflexive s in go s
+  where
+    go : (i : Nat) -> (0 prf : LTE i s) => IO b
+    go 0 = pure acc
+    go (S k) = let 0 p = lteSuccLeft prf in [| f (go k) (mutableReadArray arr k) |]
+
+-- export
+-- foldMapArray : (HasIO io, Monoid b) => (a -> b) -> Array s a -> io b
+-- foldMapArray f arr = case arr of
+--     MkArray s _ _ => let 0 prf = lteReflexive s in go s
+--   where
+--     go : (i : Nat) -> (0 prf : LTE i s) => io b
+--     go 0 = f <$> readArray' arr 0
+--     go (S k) = let 0 p = lteSuccLeft prf in [| (f <$> readArray' arr k) <+> go k |]
+
+export
+mapArray : (a -> b) -> Array s a -> Array s b
+mapArray f arr = imapArray (\_,x => f x) arr
+
+export
+zipWithArray : (a -> b -> c) -> Array s a -> Array s b -> Array s c
+zipWithArray f arr1 arr2 = unsafePerformIO $ case arr1 of
     MkArray s _ _ => do
-      new <- unsafeNewArray {a=c} s
+      let new = newUnintializedArray {a=c} s
       let 0 prf = lteReflexive s
       go new s
       pure new
   where
-    go : Array s c -> (i : Nat) -> (0 prf : LTE i s) => io ()
+    go : Array s c -> (i : Nat) -> (0 prf : LTE i s) => IO ()
     go new 0 = pure ()
     go new (S k) = do
       let 0 newprf = lteSuccLeft prf
-      v1 <- readArray' arr1 k
-      v2 <- readArray' arr2 k
+      v1 <- mutableReadArray arr1 k
+      v2 <- mutableReadArray arr2 k
       mutableWriteArray new k (f v1 v2)
       go new k
 
 export
-toList : HasIO io => Array s a -> io (List a)
-toList = foldlArray (\b,a => b ++ [a]) []
+Functor (Array s) where
+  map = mapArray
 
 export
-foldlArray' : (b -> a -> b) -> b -> Array s a -> b
-foldlArray' f acc arr = case arr of
-    MkArray s _ _ => let 0 prf = lteReflexive s in go s
-  where
-    go : (i : Nat) -> (0 prf : LTE i s) => b
-    go 0 = acc
-    go (S k) = let 0 p = lteSuccLeft prf in f (go k) (readArray arr k)
+{s:_} -> Applicative (Array s) where
+  pure a = newArray' a
+  f <*> fa = zipWithArray (\f,x => f x) f fa
 
 export
-toList' : Array s a -> List a
-toList' xs = foldlArray' (\b,a => b . (a ::)) id xs []
+toList : Array s a -> List a
+toList xs = foldlArray (\b,a => b . (a ::)) id xs []
 
 export
-fromList : HasIO io => (xs : List a) -> io (Array (length xs) a)
+fromList : (xs : List a) -> Array (length xs) a
 fromList xs with (length xs)
-  fromList xs | s = do
-      new <- unsafeNewArray {a} s
+  fromList xs | s = unsafePerformIO $ do
+      let new = newUnintializedArray {a} s
       let 0 prf = lteReflexive s
       go new (reverse xs) s
       pure new
   where
-    go : Array s a -> (xs : List a) -> (i : Nat) -> (0 prf : LTE i s) => io ()
+    go : Array s a -> (xs : List a) -> (i : Nat) -> (0 prf : LTE i s) => IO ()
     go new (x :: xs) (S k) = do
       let 0 newprf = lteSuccLeft prf
       mutableWriteArray new k x
@@ -309,69 +234,51 @@ fromList xs with (length xs)
 
 -- the length + reversing is slowish, merge the op? build up a chain of writes to execute after length is known?
 export
-fromList' : HasIO io => (xs : List a) -> io (s : Nat ** Array s a)
-fromList' xs = do
+fromList' : (xs : List a) -> (s : Nat ** Array s a)
+fromList' xs = unsafePerformIO $ do
     let s = length xs
-    new <- unsafeNewArray {a} s
+    let new = newUnintializedArray {a} s
     let 0 prf = lteReflexive s
     go new (reverse xs) s
     pure (s ** new)
   where
-    go : Array s a -> (xs : List a) -> (i : Nat) -> (0 prf : LTE i s) => io ()
+    go : Array s a -> (xs : List a) -> (i : Nat) -> (0 prf : LTE i s) => IO ()
     go new (x :: xs) (S k) = do
       let 0 newprf = lteSuccLeft prf
       mutableWriteArray new k x
       go new xs k
     go new _ _ = pure ()
 
--- the length + reversing is slowish, merge the op? build up a chain of writes to execute after length is known?
-export
-fromList'' : (xs : List a) -> (s : Nat ** Array s a)
-fromList'' xs = unsafePerformIO $ fromList' xs
-
-export
-fromList''' : (xs : List a) -> Array (length xs) a
-fromList''' xs = unsafePerformIO $ fromList xs
-
-export
-prettyArray : Show a => Array s a -> String
-prettyArray x = show (toList' x)
-
 export
 Show a => Show (Array s a) where
-  show x = "fromList " ++ prettyArray x
+  show x = "fromList " ++ show (Array.toList x)
 
 export
 %inline
-pointwise' : HasIO io => Num a => Array s (a -> b) -> Array s a -> io (Array s b)
-pointwise' = zipWithArray (\f,x => f x)
-
-export
-%inline
-pointwise : HasIO io => Num a => Array s a -> Array s a -> io (Array s a)
+pointwise : Num a => Array s a -> Array s a -> Array s a
 pointwise = zipWithArray (+)
 
 export
 %inline
-(+) : HasIO io => Num a => Array s a -> Array s a -> io (Array s a)
+(+) : Num a => Array s a -> Array s a -> Array s a
 (+) = pointwise
 
 export
-sumArray : HasIO io => Num a => Array s a -> io a
+sumArray : Num a => Array s a -> a
 sumArray = foldlArray (+) 0
 
 export
-dotArray : HasIO io => Num a => Array s a -> Array s a -> io a
-dotArray a b = sumArray !(zipWithArray (*) a b)
+dotArray : Num a => Array s a -> Array s a -> a
+dotArray a b = sumArray (zipWithArray (*) a b)
 
 
 export
 ToJSON a => ToJSON (Array s a) where
-  toJSON = toJSON . toList'
+  toJSON = toJSON . Array.toList
 
 export
 FromJSON a => FromJSON (s : Nat ** Array s a) where
-  fromJSON = map fromList'' . fromJSON
+  fromJSON = map fromList' . fromJSON
 
 export
 {s:_} -> FromJSON a => FromJSON (Array s a) where
@@ -379,10 +286,8 @@ export
     xs <- fromJSON {a=List a} x
     case decEq (length xs) s of
       (No contra) => fail "List length not correct, expected \{show s} got \{show (length xs)}"
-      (Yes Refl) => Right $ fromList''' xs
-    
+      (Yes Refl) => Right $ fromList xs
 
--}
 
 
 

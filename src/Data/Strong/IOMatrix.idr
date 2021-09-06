@@ -143,19 +143,19 @@ vectMult' mat arr = case mat of
       rowLoop h w arrr {prf1 = fef h} {prf2 = fef w}
       pure arrr
   where
-    colLoop : (r : Nat) -> (c : Nat) -> (0 prf1 : LTE r h) => (0 prf2 : LTE c w) => io (List a)
-    colLoop r 0 = pure []
+    colLoop : (r : Nat) -> (c : Nat) -> (0 prf1 : LTE r h) => (0 prf2 : LTE c w) => io a
+    colLoop r 0 = pure 0
     colLoop r (S c) = do
       let 0 p = lteSuccLeft prf2
       mv <- read mat r c
       av <- readArray' arr c
-      [| pure (av * mv) :: colLoop r c {prf2 = p} |]
+      [| pure (av * mv) + colLoop r c {prf2 = p} |]
     rowLoop : (r : Nat) -> (w'' : Nat) -> (0 prf1 : LTE r h) => (0 prf2 : LTE w'' w) => SIOArray h a -> io ()
     rowLoop 0 w'' arr' = pure ()
     rowLoop (S k) w'' arr = do
         let 0 p = lteSuccLeft prf1
         updrow <- colLoop k w''
-        mutableWriteArray arr k (sum updrow)
+        mutableWriteArray arr k updrow
         rowLoop k w'' arr
 
 export
@@ -166,19 +166,19 @@ vectMult'' mat arr = unsafePerformIO $ case mat of
       rowLoop h w arrr {prf1 = fef h} {prf2 = fef w}
       pure arrr
   where
-    colLoop : (r : Nat) -> (c : Nat) -> (0 prf1 : LTE r h) => (0 prf2 : LTE c w) => IO (List a)
-    colLoop r 0 = pure []
+    colLoop : (r : Nat) -> (c : Nat) -> (0 prf1 : LTE r h) => (0 prf2 : LTE c w) => IO a
+    colLoop r 0 = pure 0
     colLoop r (S c) = do
       let 0 p = lteSuccLeft prf2
       mv <- read mat r c
       av <- readArray' arr c
-      [| pure (av * mv) :: colLoop r c {prf2 = p} |]
+      [| pure (av * mv) + colLoop r c {prf2 = p} |]
     rowLoop : (r : Nat) -> (w'' : Nat) -> (0 prf1 : LTE r h) => (0 prf2 : LTE w'' w) => SIOArray h a -> IO ()
     rowLoop 0 w'' arr' = pure ()
     rowLoop (S k) w'' arr = do
         let 0 p = lteSuccLeft prf1
         updrow <- colLoop k w''
-        mutableWriteArray arr k (sum updrow)
+        mutableWriteArray arr k (updrow)
         rowLoop k w'' arr
 
 infixl 3 #>
