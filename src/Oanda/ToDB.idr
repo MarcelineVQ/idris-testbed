@@ -189,6 +189,22 @@ getSome gran from to = runManaged $ do
       | Left _ => liftIO $ putStrLn "failed inserts"
     pure ()
 
+
+-- sqlExec : DB -> (sql : String) -> (a -> Int -> List String -> List String -> PrimIO Int) -> a -> String -> PrimIO Int
+
+-- try fetch via callback
+-- sqlCallback : DB -> (sql : String) ->
+
+{-
+int sqlite3_exec(
+  sqlite3*,                                  /* An open database */
+  const char *sql,                           /* SQL to be evaluated */
+  int (*callback)(void*,int,char**,char**),  /* Callback function */
+  void *,                                    /* 1st argument to callback */
+  char **errmsg                              /* Error msg written here */
+);
+-}
+
 export
 fetchSQLCandleType : Stmt -> IO SQLCandleType
 fetchSQLCandleType stmt = do

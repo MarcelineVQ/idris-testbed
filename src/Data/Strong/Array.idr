@@ -13,12 +13,12 @@ import Data.List
 
 import System.Random
 
+import Util
+
 import Decidable.Equality
 import JSON
 import Generics.Derive
 %language ElabReflection
-
--- An IOArray of exact aent count
 
 -- Not sure how else to extract size while retaining relation without exposing
 -- constructor for casing
@@ -26,14 +26,11 @@ public export
 data Array : Nat -> Type -> Type where
   MkArray : (size : Nat) -> (intSize : Int) -> (content : ArrayData a) -> Array size a
 
--- I feel like s could allow for eason fusion, by determinig our final size upfront
+-- I feel like s could allow for easier fusion, by determinig our final size upfront
 
 -- %runElab derive "Array" [Generic,Meta] I can't sop/generic elab this
 -- because it doesn't support indexed types that hold the index, e.g. size : Nat
 -- above. We'll go to list instead for json.
-
--- It's time to move to immutable arrays, all this io is gay
--- Your array functions that copy have no reason to be in io
 
 -- 0 so I don't have to remember where to erase it
 0 lteReflexive : (j : Nat) -> LTE j j
@@ -165,12 +162,12 @@ inewArrayFill s g = runIdentity $ imapArrayM (\i,_ => Id (g i)) (newUnintialized
 
 export
 foldlArray : (b -> a -> b) -> b -> Array s a -> b
-foldlArray f acc arr = unsafePerformIO $ case arr of
+foldlArray f acc arr = case arr of
     MkArray s _ _ => let 0 prf = lteReflexive s in go s
   where
-    go : (i : Nat) -> (0 prf : LTE i s) => IO b
-    go 0 = pure acc
-    go (S k) = let 0 p = lteSuccLeft prf in [| f (go k) (mutableReadArray arr k) |]
+    go : (i : Nat) -> (0 prf : LTE i s) => b
+    go 0 = acc
+    go (S k) = let 0 p = lteSuccLeft prf in f (go k) (readArray arr k)
 
 -- export
 -- foldMapArray : (HasIO io, Monoid b) => (a -> b) -> Array s a -> io b
@@ -187,21 +184,20 @@ mapArray f arr = imapArray (\_,x => f x) arr
 
 export
 zipWithArray : (a -> b -> c) -> Array s a -> Array s b -> Array s c
-zipWithArray f arr1 arr2 = unsafePerformIO $ case arr1 of
-    MkArray s _ _ => do
+zipWithArray f arr1 arr2 = case arr1 of
+    MkArray s _ _ =>
       let new = newUnintializedArray {a=c} s
-      let 0 prf = lteReflexive s
-      go new s
-      pure new
+          0 prf = lteReflexive s
+      in  go new s
   where
-    go : Array s c -> (i : Nat) -> (0 prf : LTE i s) => IO ()
-    go new 0 = pure ()
-    go new (S k) = do
+    go : Array s c -> (i : Nat) -> (0 prf : LTE i s) => Array s c
+    go new 0 = new
+    go new (S k) =
       let 0 newprf = lteSuccLeft prf
-      v1 <- mutableReadArray arr1 k
-      v2 <- mutableReadArray arr2 k
-      mutableWriteArray new k (f v1 v2)
-      go new k
+          v1 = readArray arr1 k
+          v2 = readArray arr2 k
+          () = unsafePerformIO $ mutableWriteArray new k (f v1 v2)
+      in  go new k
 
 export
 Functor (Array s) where
@@ -219,35 +215,33 @@ toList xs = foldlArray (\b,a => b . (a ::)) id xs []
 export
 fromList : (xs : List a) -> Array (length xs) a
 fromList xs with (length xs)
-  fromList xs | s = unsafePerformIO $ do
+  fromList xs | s =
       let new = newUnintializedArray {a} s
-      let 0 prf = lteReflexive s
-      go new (reverse xs) s
-      pure new
+          0 prf = lteReflexive s
+      in  go new (reverse xs) s
   where
-    go : Array s a -> (xs : List a) -> (i : Nat) -> (0 prf : LTE i s) => IO ()
-    go new (x :: xs) (S k) = do
+    go : Array s a -> (xs : List a) -> (i : Nat) -> (0 prf : LTE i s) => Array s a
+    go new (x :: xs) (S k) =
       let 0 newprf = lteSuccLeft prf
-      mutableWriteArray new k x
-      go new xs k
-    go new _ _ = pure ()
+          () = unsafePerformIO $ mutableWriteArray new k x
+      in  go new xs k
+    go new _ _ = new
 
 -- the length + reversing is slowish, merge the op? build up a chain of writes to execute after length is known?
 export
 fromList' : (xs : List a) -> (s : Nat ** Array s a)
-fromList' xs = unsafePerformIO $ do
+fromList' xs =
     let s = length xs
-    let new = newUnintializedArray {a} s
-    let 0 prf = lteReflexive s
-    go new (reverse xs) s
-    pure (s ** new)
+        new = newUnintializedArray {a} s
+        0 prf = lteReflexive s
+    in (s ** go new (reverse xs) s)
   where
-    go : Array s a -> (xs : List a) -> (i : Nat) -> (0 prf : LTE i s) => IO ()
-    go new (x :: xs) (S k) = do
+    go : Array s a -> (xs : List a) -> (i : Nat) -> (0 prf : LTE i s) => Array s a
+    go new (x :: xs) (S k) =
       let 0 newprf = lteSuccLeft prf
-      mutableWriteArray new k x
-      go new xs k
-    go new _ _ = pure ()
+          () = unsafePerformIO $ mutableWriteArray new k x
+      in  go new xs k
+    go new _ _ = new
 
 export
 Show a => Show (Array s a) where
@@ -271,6 +265,9 @@ export
 dotArray : Num a => Array s a -> Array s a -> a
 dotArray a b = sumArray (zipWithArray (*) a b)
 
+export
+arrEq : Eq a => Array s a -> Array s a -> Bool
+arrEq x y = foldlArray (&&|) True $ zipWithArray (==) x y
 
 export
 ToJSON a => ToJSON (Array s a) where

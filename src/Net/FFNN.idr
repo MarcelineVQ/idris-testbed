@@ -4,8 +4,8 @@ import Net.Random.IO
 
 import Control.Monad.Random.RandT
 
-import Data.Strong.IOMatrix
-import Data.Strong.IOArray
+import Data.Strong.Matrix
+import Data.Strong.Array
 
 import System.Random.Natural
 
@@ -26,30 +26,26 @@ import Util
 -- high,low,open,close per bar. This means our input layer is 400 wide
 
 export
-randomRead : HasIO io => SIOArray s a -> io a
+randomRead : HasIO io => Array s a -> io a
 randomRead arr = do
   let c = cast $ !(randomRIO (0, size arr - 1))
-  unsafeReadArray' arr c
+  unsafeMutableReadArray arr c
 
 export
-randomArr : HasIO io => (s : Nat) -> io (SIOArray s Double)
-randomArr s = newArrayFillM s (\_ => randWeight)
+randomArr : HasIO io => (s : Nat) -> io (Array s Double)
+randomArr s = inewArrayFillM s (\_ => randWeight)
 
 export
-randomMat : HasIO io => (m,n : Nat) -> io (SIOMatrix m n Double)
-randomMat m n = newFillM (cast m) (cast n) (\_,_ => randWeight)
+randomMat : HasIO io => (m,n : Nat) -> io (Matrix m n Double)
+randomMat m n = inewMatrixFillM (cast m) (cast n) (\_,_ => randWeight)
 
 export
 randomFun : HasIO io => io Activation
-randomFun = do
-  funs <- fromList actList
-  randomRead funs
+randomFun = randomRead (fromList actList)
 
 export
-randomFuns : HasIO io => (s : Nat) -> io (SIOArray s Activation)
-randomFuns s = do
-  funs <- fromList actList
-  newArrayFillM s (\_ => randomRead funs)
+randomFuns : HasIO io => (s : Nat) -> io (Array s Activation)
+randomFuns s = inewArrayFillM s (\_ => randomFun)
 
 export
 randomWeights : HasIO io => (i,o : Nat) -> io (Weights i o)
@@ -68,36 +64,30 @@ ploos : Double -> Double
 ploos = sigmoid
 
 export
-runLayer : HasIO io => Weights i o -> SIOArray i Double -> io (SIOArray o Double)
-runLayer w v = do
-    mat <- {- timeIt "array mult" $ -} (wNodes w) #> v
-    plus <- {- timeIt "array plus" $ -} (wBias w) + mat
-    pure plus
--- -- ^ this is taking my weights and spitting them out
+runLayer : Weights i o -> Array i Double -> Array o Double
+runLayer w v = wBias w + wNodes w #> v
 
 export
-runNet' : HasIO io => Network i hs o -> SIOArray i Double -> io (SIOArray o Double)
+runNet' : Network i hs o -> Array i Double -> Array o Double
+-- runNet' (O x) input = mapArray (actToFunc Relu) $ runLayer x input
 runNet' (O x) input = runLayer x input
-runNet' (L a x y) input = do
-  r <- runLayer x input
-  c <- mapArray (actToFunc a) r
-  r <- runNet' y c
-  pure r
+runNet' (L a x y) input =
+  let r = runLayer x input
+      c = mapArray (actToFunc a) r
+      r' = runNet' y c
+  in r'
 
 export
 %inline
-runNet : HasIO io => Network i hs o -> SIOArray i Double -> io (SIOArray o Double)
-runNet n inp = do
-  r <- runNet' n inp
-  -- putStr "runNet final: " *> printLn r
-  pure r
+runNet : Network i hs o -> Array i Double -> Array o Double
+runNet n inp = runNet' n inp
 
 export
-testRunNet : IO (SIOArray 1 Double)
+testRunNet : IO (Array 1 Double)
 testRunNet = do
   net <- randomNet 2 [3] 1
   randArr <- randomArr 2
-  runNet net randArr
+  pure $ runNet net randArr
 
 main : IO ()
 main = do

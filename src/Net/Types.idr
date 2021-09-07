@@ -1,7 +1,7 @@
 module Net.Types
 
-import public Data.Strong.IOMatrix
-import public Data.Strong.IOArray
+import public Data.Strong.Matrix
+import public Data.Strong.Array
 
 import Net.Activation
 
@@ -12,13 +12,13 @@ import Generics.Derive
 -- SIOArray of Doubles
 public export
 DArray : Nat -> Type
-DArray n = SIOArray n Double
+DArray n = Array n Double
 
 public export
 record Weights (i : Nat) (o : Nat) where
   constructor MkWeights
-  wBias : SIOArray o Double
-  wNodes : SIOMatrix o i Double
+  wBias : Array o Double
+  wNodes : Matrix o i Double
 
 %runElab derive "Weights" [Generic,Meta]
 
@@ -41,7 +41,7 @@ record Genome (i : Nat) (o : Nat) where
 
 export
 prettyWeights : Weights i o -> String
-prettyWeights (MkWeights wBias wNodes) = prettyArray wBias ++ "\n" ++ prettyMatrix wNodes
+prettyWeights (MkWeights wBias wNodes) = show wBias ++ "\n" ++ prettyMatrix wNodes
 
 export
 prettyNet : Network i hs o -> String
@@ -51,4 +51,3 @@ prettyNet (L a x y) = show a ++ "\n" ++ prettyWeights x ++ "\n" ++ prettyNet y
 export
 prettyGenome : Genome i o -> String
 prettyGenome (MkGenome net f sf) = "MkGenome " ++ prettyNet net ++ " " ++ show f ++ " " ++ show sf
-
