@@ -57,7 +57,7 @@ swish x = x * sigmoid x
 export
 actList : List Activation
 -- actList = [Sigmoid, Sigmoid', Relu, LeakyRelu, Tanh, Swish]
-actList = [Sigmoid, Sigmoid', Relu, LeakyRelu, Swish]
+actList = [LeakyRelu]--Sigmoid]--, Sigmoid', Relu, LeakyRelu, Swish]
 
 export
 %inline

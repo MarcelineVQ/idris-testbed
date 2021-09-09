@@ -26,6 +26,8 @@ public export
 data Array : Nat -> Type -> Type where
   MkArray : (size : Nat) -> (intSize : Int) -> (content : ArrayData a) -> Array size a
 
+-- %transform "fastConcat" concat {t = List} {a = String} = fastConcat
+
 -- I feel like s could allow for easier fusion, by determinig our final size upfront
 
 -- %runElab derive "Array" [Generic,Meta] I can't sop/generic elab this
@@ -37,8 +39,12 @@ data Array : Nat -> Type -> Type where
 lteReflexive j = reflexive {x=j}
 
 export
-size : Array s a -> Int
-size (MkArray s intSize content) = intSize
+size : Array s a -> Nat
+size (MkArray s' intSize content) = s'
+
+export
+intSize : Array s a -> Int
+intSize (MkArray s intSize' content) = intSize'
 
 content : Array s a -> ArrayData a
 content (MkArray s intSize c) = c
@@ -256,6 +262,11 @@ export
 %inline
 (+) : Num a => Array s a -> Array s a -> Array s a
 (+) = pointwise
+
+export
+%inline
+(*) : Num a => Array s a -> Array s a -> Array s a
+(*) = zipWithArray (*)
 
 export
 sumArray : Num a => Array s a -> a

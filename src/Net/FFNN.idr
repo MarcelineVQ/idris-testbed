@@ -28,7 +28,7 @@ import Util
 export
 randomRead : HasIO io => Array s a -> io a
 randomRead arr = do
-  let c = cast $ !(randomRIO (0, size arr - 1))
+  let c = cast $ !(randomRIO (0, intSize arr - 1))
   unsafeMutableReadArray arr c
 
 export

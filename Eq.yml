@@ -12,5 +12,5 @@ depends:
 - idris2-hedgehog
 - sqlite3
 
-main: Net.SSS15M
+main: Net.SSSRec15M
 executable: Fef

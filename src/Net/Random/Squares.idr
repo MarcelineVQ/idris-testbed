@@ -43,7 +43,7 @@ randomNormalR range = pure $ normalizePR !randomNormal range
 -- Brand new weight: (-8,8)
 export
 randomWeight : MonadState (Bits64,Bits64) m => m Double
-randomWeight = pure $ !randomNormal * 8
+randomWeight = pure $ !randomNormal
 
 -- (0,1)
 export
@@ -58,5 +58,5 @@ twelve = (`subtract` 6) . sum <$> replicateA 12 randomNormalP
 -- Perturb an existing weight
 export
 perturbWeight : MonadState (Bits64,Bits64) m => Double -> m Double
-perturbWeight w = pure $ clamp (-8) 8 (!twelve + w)
+perturbWeight w = pure $ clamp (-1) 1 (!twelve + w)
 
