@@ -33,7 +33,9 @@ contenth = "\"Content-Type: application/json\""
 
 export
 selfAuth : AuthToken
-selfAuth = MkAuthToken "21603a35787c64d4c1277856a8551a43-9dea44e08f2473bcef690b265264530c"
+selfAuth = unsafePerformIO $ do
+  key <- readFile "oanda-api-key.txt"
+  pure $ either (const (MkAuthToken "")) MkAuthToken key
 
 export
 timeh : AcceptDateTimeFormat -> String
@@ -59,7 +61,6 @@ mkRequest (CandleReq dtf pair gran from countOrTo) token =
         arg3 = "&granularity=" ++ show gran
     in MkCurlReq (basicHeader token dtf) (apiUrl ++ "instruments/" ++ show pair ++ "/candles?price=MBA" ++ arg1 ++ arg2 ++ arg3)
 
--- TODO: repeal this token
 export
 testRequest : CurlReq Candle
 testRequest = mkRequest (CandleReq DTRFC3339 USD_CAD M1 "2010-08-31T00:01:00.000000000Z" (Left 10)) selfAuth

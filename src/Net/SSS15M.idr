@@ -272,7 +272,7 @@ evalParent params datas p@(MkGenome parentNet parentFit parentSFit) = do
     -- if reses are all the same this net is a complete bust
     (r :: rs) <- pure res
       | _ => pure (MkGenome parentNet parentFit parentSFit, MkGenome childNet minDouble minDouble)
-    if all (arrEq r) rs
+    if all (== r) rs
       then do
         -- putStrLn "all same"
         pure (MkGenome parentNet parentFit parentSFit, MkGenome childNet minDouble minDouble)

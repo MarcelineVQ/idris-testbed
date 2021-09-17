@@ -84,8 +84,12 @@ data RecNetwork : Nat -> List Nat -> Nat -> Type where
   O : Weights i o -> (prev : RecWeights o) -> RecNetwork i [] o
   L : Activation -> Weights i h -> RecNetwork h hs o -> (prev : RecWeights h) -> RecNetwork i (h :: hs) o
 
--- recnetwork should have weights for the recurrent connections too
--- we can reuse Weights, and have the bias be the last input
+
+
+-- public export
+-- data RecNetwork' : (i : Nat) -> (hs : List Nat) -> (o : Nat) -> Type where
+  -- O' : Weights i o -> (prev : RecWeights o) -> RecNetwork' i [] o
+  -- L' : Activation -> Weights i h -> RecNetwork' h hs o -> (prev : RecWeights h) -> RecNetwork' i (h :: hs) o
 
 
 
@@ -97,23 +101,23 @@ record RecGenome (i : Nat) (o : Nat) where
   geneStochasticFitness : Double
 
 export
-runNet' : RecNetwork i hs o -> Array i Double -> (RecNetwork i hs o, Array o Double)
-runNet' (O x prev) input =
+stepNet : RecNetwork i hs o -> Array i Double -> (RecNetwork i hs o, Array o Double)
+stepNet (O x prev) input =
     let r = runLayer x input prev
         tb = record {wInp = r} prev
     in (O x tb, r)
-runNet' (L a x y prev) input =
+stepNet (L a x y prev) input =
     let r = runLayer x input prev
         c = mapArray (actToFunc a) r
         tb = record {wInp = c} prev
-        (new,r') = runNet' y c
+        (new,r') = stepNet y c
     in (L a x new tb, r')
 
 export
 %inline
 runNet : (RecNetwork i hs o, Array o Double) -> List (Array i Double) -> Array o Double
 runNet (n,res) [] = res
-runNet (n,res) (x :: xs) = runNet (runNet' n x) xs
+runNet (n,res) (x :: xs) = runNet (stepNet n x) xs
 
 
 

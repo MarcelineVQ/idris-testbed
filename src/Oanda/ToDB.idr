@@ -160,7 +160,7 @@ insertCandlestickResponse db resp = do
   Just r <- pure $ candleRespToSQLType resp
     | _ => pure (Right False)
   -- is last candle complete
-  ref <- liftIO $ newIORef False
+  ref <- liftIO $ newIORef True
   -- beginTransaction db
   sqlCmd db "BEGIN TRANSACTION;"
   _ <- for r $ \candle => do
@@ -251,8 +251,10 @@ getCandles' sql = do
     Right stmt <- managedStmt db sql
       | Left err => putStrLn "stmt make error" *> pure []
     -- sqlCmd db "begin;"
+    sqlCmd db "BEGIN TRANSACTION;"
     Right r <- liftIO $ fetchRows stmt
       | Left err => putStrLn "row get error" *> pure []
+    sqlCmd db "COMMIT TRANSACTION;"
     -- sqlCmd db "end;"
     pure r
 
@@ -270,6 +272,7 @@ getCandles'' mod = do
   readIORef r
 
 -- grab latest candle of given gran
+export
 latestCandle : InstrumentName -> CandlestickGranularity -> Managed (Maybe SQLCandleType)
 latestCandle inst gran = do
   let sql = "select * from candle where instrument = \"\{show inst}\" and granularity = \"\{show gran}\" order by opentime desc limit 1;"
@@ -298,8 +301,8 @@ fetchAllFrom' inst gran from count = runEitherT {m = Managed} $ do
     db <- MkEitherT $ use $ managedDB "oanda-data.db"
     Right r <- liftIO $ runRequest $ mkRequest (CandleReq DTRFC3339 inst gran from (Left count)) selfAuth
       | Left rerr => printLn rerr
--- insert into db
--- query db for last entry, use that as new DateTime, repeat until unfinished candle
+    -- insert into db
+    -- query db for last entry, use that as new DateTime, repeat until unfinished candle
     Just r' <- pure (respToCandles r)
       | _ => liftIO $ putStrLn "failed respToCandles"
     b <- MkEitherT $ insertCandlestickResponse db r'
@@ -312,14 +315,29 @@ fetchAllFrom' inst gran from count = runEitherT {m = Managed} $ do
         MkEitherT $ fetchAllFrom' inst gran (MkDateTime (timeFrom from')) count
 -- "2010-01-01T00:00:00.000000000Z"
 
+-- fetch last candle, use that as start time for grabbing
+export
+fetchAllFromLast : InstrumentName -> CandlestickGranularity -> Integer -> IO ()
+fetchAllFromLast inst gran count = runManaged $ do
+    Just from <- use $ latestCandle inst gran
+      | _ => liftIO $ putStrLn "failed getting last candle"
+    _ <- fetchAllFrom' inst gran (MkDateTime $ timeFrom from) count
+    pure () 
+
+export
+oldest : DateTime
+oldest = MkDateTime $ "2010-01-01T00:00:00.000000000Z"
+
+-- this should all be streams, too much full lists are being built
 export
 doFetchAllFrom : InstrumentName -> CandlestickGranularity -> DateTime -> Integer -> IO ()
 doFetchAllFrom inst gran from count = runManaged $ do
   _ <- fetchAllFrom' inst gran from count
   pure ()
 
+export
 main : IO ()
-main = pure ()
+main = fetchAllFromLast USD_CAD H1 5000
 
 
 

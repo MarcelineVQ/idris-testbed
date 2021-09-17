@@ -19,7 +19,7 @@ subtract : Neg a => Num a => a -> a -> a
 subtract x y = x - y
 
 export
-%inline
+-- %inline -- causes a loop currently
 exp : (Num a, Ord b, Neg b) => a -> b -> a
 exp x y = if y <= 0 then 1 else x * exp x (y - 1)
 
@@ -48,11 +48,13 @@ export
   compare x y = compare @{ord} y x
 
 export
-randEnv : MonadState (Bits64,Bits64) IO => IO a -> IO ()
+randEnv : StateT (Bits64,Bits64) IO a -> IO ()
 randEnv act = do
   seed1 <- cast {from=Int} {to=Bits64} <$> randomIO
   seed2 <- cast {from=Int} {to=Bits64} <$> randomIO
-  _ <- runStateT (seed1,seed2) $ lift act
+  _ <- runStateT (seed1,seed2) $ do
+    z <- act
+    pure ()
   pure ()
 
 infixl 4 &&|
@@ -60,3 +62,10 @@ infixl 4 &&|
 export
 (&&|) : Bool -> Bool -> Bool
 x &&| y = x && y
+
+infixr 10 ^
+export
+(^) : Num a => a -> Nat -> a
+v ^ Z = 1
+v ^ (S y) = v * (v ^ y)
+

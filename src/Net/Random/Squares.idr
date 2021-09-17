@@ -55,6 +55,9 @@ export
 twelve : MonadState (Bits64,Bits64) m => m Double
 twelve = (`subtract` 6) . sum <$> replicateA 12 randomNormalP
 
+normalProbDense : (stdDev : Double) -> (mean : Double) -> Double -> Double
+normalProbDense stdDev mean x = 1 / sqrt (2 * pi * stdDev ^ 2) * exp ((-1) * (x - mean) ^ 2 / (2 * stdDev ^ 2))
+
 -- Perturb an existing weight
 export
 perturbWeight : MonadState (Bits64,Bits64) m => Double -> m Double

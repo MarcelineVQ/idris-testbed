@@ -171,6 +171,30 @@ foldlMatrix f acc mat = case mat of
           rest = rowLoop k w'' mat'
       in  rest ++ [v]
 
+-- this should just visit every array value, we don't need a row/col based order
+export
+zipWithMatrix : (a -> b -> c) -> Matrix h w a -> Matrix h w b -> Matrix h w c
+zipWithMatrix f mat1 mat2 = case mat1 of
+            MkMatrix h w _ _ _ =>
+              let new = newUnintializedMatrix {a=c} h w
+                  0 prf1 = lteReflexive h
+                  0 prf2 = lteReflexive w
+              in rowLoop h w new
+  where
+    colLoop : (r : Nat) -> (col : Nat) -> Matrix h w c -> (0 prf1 : LTE r h) => (0 prf2 : LTE col w) => Matrix h w c
+    colLoop r 0 mat' = mat'
+    colLoop r (S col) mat' =
+      let 0 p = lteSuccLeft prf2
+          v1 = readMatrix mat1 r col
+          v2 = readMatrix mat2 r col
+          () = unsafePerformIO $ mutableWriteMatrix mat' r col (f v1 v2)
+      in colLoop r col mat'
+    rowLoop : (r : Nat) -> (w'' : Nat) -> (0 prf1 : LTE r h) => (0 prf2 : LTE w'' w) => Matrix h w c -> Matrix h w c
+    rowLoop 0 w'' mat' = mat'
+    rowLoop (S k) w'' mat' =
+      let 0 p = lteSuccLeft prf1
+      in rowLoop k w'' (colLoop k w'' mat')
+
 -- this could be more straightforward with vectors since we can just return a list of slices
 export
 toRows : Matrix rows cols a -> List (Array cols a)

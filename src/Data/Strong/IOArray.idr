@@ -6,7 +6,7 @@ import public Data.Nat
 import Data.DPair
 
 
-import Num.Floating
+import Numeric.Floating
 
 import Data.List
 

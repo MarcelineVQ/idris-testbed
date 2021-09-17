@@ -11,6 +11,7 @@ depends:
 - idris2-json
 - idris2-hedgehog
 - sqlite3
+- sarray
 
 main: Net.SSSRec15M
 executable: Fef

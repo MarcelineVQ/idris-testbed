@@ -5,10 +5,10 @@ me separate concerns
 
 
 -- check for dupes
-select * from candle where rowid not in (select min (rowid) from candle group by opentime,granularity);
+select * from candle where rowid not in (select min (rowid) from candle group by instrument,opentime,granularity);
 
 -- delete dupes
-delete from candle where rowid not in (select min (rowid) from candle group by opentime,granularity);
+delete from candle where rowid not in (select min (rowid) from candle group by instrument,opentime,granularity);
 
 delete from candle where complete = 0;
 
