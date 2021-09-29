@@ -5,13 +5,14 @@ depends:
 - base
 - contrib
 - managed
-- idris2-elab-util
-- idris2-sop
-- idris2-pretty-show
-- idris2-json
-- idris2-hedgehog
+- elab-util
+- sop
+- pretty-show
+- json
+- hedgehog
 - sqlite3
 - sarray
+- newtype-deriving
 
-main: Net.SSSRec15M
+main: Net.AFSSS15M #Data.ArrayFire #BP #Net.SSSRec15M
 executable: Fef

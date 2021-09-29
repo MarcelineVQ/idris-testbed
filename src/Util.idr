@@ -69,3 +69,14 @@ export
 v ^ Z = 1
 v ^ (S y) = v * (v ^ y)
 
+
+-- TODO: bring this up with other devs for idris about it's merits and negatives
+private
+total
+%foreign "scheme:lambda (x) (blodwen-error-quit x)"
+lie_idris_crash : String -> a
+
+export
+total
+lieErrorCall : (module' : String) -> (func_name : String) -> (msg : String) -> a
+lieErrorCall mod fn_name msg = lie_idris_crash $ mod ++ ":" ++ fn_name ++ ": " ++ msg

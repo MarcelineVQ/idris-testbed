@@ -278,6 +278,37 @@ export
 (#>) : Num a => Matrix h w a -> Array w a -> Array h a
 (#>) = vectMult
 
+export
+tr : Matrix h w a -> Matrix w h a
+tr mat = case mat of
+  MkMatrix h w _ _ _ =>
+    imapMatrix (\r,c,_ => unsafeReadMatrix mat c r) newUnintializedMatrix' {a}
+
+export
+outer : Num a => Array n a -> Array m a -> Matrix n m a
+outer arr1 arr2 = case (arr1,arr2) of
+  (MkArray n _ _, MkArray m _ _) => imapMatrix (\r,c,_ => unsafeReadArray arr1 r * unsafeReadArray arr2 c) newUnintializedMatrix' {a}
+
+-- outer f arr1 arr2 = case arr1 of
+--             MkArray s _ _ =>
+--               let new = newUnintializedMatrix {a=c} s s
+--                   0 prf1 = lteReflexive h
+--                   0 prf2 = lteReflexive w
+--               in rowLoop h w new
+--   where
+--     colLoop : (r : Nat) -> (col : Nat) -> Matrix h w c -> (0 prf1 : LTE r h) => (0 prf2 : LTE col w) => Matrix h w c
+--     colLoop r 0 mat' = mat'
+--     colLoop r (S col) mat' =
+--       let 0 p = lteSuccLeft prf2
+--           v1 = readMatrix mat1 r col
+--           v2 = readMatrix mat2 r col
+--           () = unsafePerformIO $ mutableWriteMatrix mat' r col (f v1 v2)
+--       in colLoop r col mat'
+--     rowLoop : (r : Nat) -> (w'' : Nat) -> (0 prf1 : LTE r h) => (0 prf2 : LTE w'' w) => Matrix h w c -> Matrix h w c
+--     rowLoop 0 w'' mat' = mat'
+--     rowLoop (S k) w'' mat' =
+--       let 0 p = lteSuccLeft prf1
+--       in rowLoop k w'' (colLoop k w'' mat')
 
 -- TODO: change me to dlist
 export

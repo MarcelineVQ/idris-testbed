@@ -16,6 +16,11 @@ record D a where
   primal : a
   dual : a
 
+export
+mapPrimal : (a -> a) -> D a -> D a
+mapPrimal f (MkD x y) = MkD (f x) y
+
+export
 mapDual : (a -> a) -> D a -> D a
 mapDual f (MkD x y) = MkD x (f y)
 
@@ -72,6 +77,7 @@ oneNum _ = 1
 
 public export
 interface Backprop a where
+  constructor MkBackprop
   zero : a -> a
   one : a -> a
   add : a -> a -> a
@@ -86,7 +92,7 @@ export
 auto'' : Num a => a -> AD s a
 auto'' x = MkAD0 $ lift $ var x 0
 
--- giving this to every Num a can cause interface conflicts
+-- giving this to every `Num a` can cause interface conflicts
 export
 [DefaultNumBackprop]
 Num a => Backprop a where
@@ -113,19 +119,12 @@ Backprop Integer where
   add = addNum
 
 -- | Lift a unary function
---
 -- This is a polymorphic combinator for tracking how primal and adjoint values are transformed by a function.
---
 -- How does this work :
---
 -- 1) Compute the function result and bind the function inputs to the adjoint updating function (the "pullback")
---
 -- 2) Allocate a fresh STRef @rb@ with the function result and @zero@ adjoint part
---
 -- 3) @rb@ is passed downstream as an argument to the continuation @k@, with the expectation that the STRef will be mutated
---
 -- 4) Upon returning from the @k@ (bouncing from the boundary of @resetT@), the mutated STRef is read back in
---
 -- 5) The adjoint part of the input variable is updated using @rb@ and the result of the continuation is returned.
 export
 op1_  : (b -> b) -- ^ zero
@@ -145,12 +144,12 @@ op1_ zeroa plusa f ioa = do
     pure ry
 
 -- | Lift a unary function
---
--- The first two arguments constrain the types of the adjoint values of the output and input variable respectively, see 'op1Num' for an example.
---
--- The third argument is the most interesting: it specifies at once how to compute the function value and how to compute the sensitivity with respect to the function parameter.
---
--- Note : the type parameters are completely unconstrained.
+-- The first two arguments constrain the types of the adjoint values of the
+-- output and input variable respectively, see 'op1Num' for an example.
+-- The third argument is the most interesting: it specifies at once how to
+-- compute the function value and how to compute the sensitivity with respect to
+-- the function parameter.
+-- Note: the type parameters are completely unconstrained.
 export
 op1  : (b -> b) -- ^ zero
     -> (a -> a -> a) -- ^ plus
@@ -247,25 +246,27 @@ op2Num  : (Num a, Num b, Num c) =>
 op2Num = op2 0 (+) (+)
 
 export
+Backprop a => Backprop (AD s a) where
+  zero = op1' $ \x =>   (zero x, zero)
+  one  = op1' $ \x =>   (one  x, zero)
+  add  = op2' $ \x,y => (add x y, (id,id))
+
+export
 Num a => Num (AD s a) where
   (+) = op2Num $ \x,y => (x + y, id, id)
   (*) = op2Num $ \x,y => (x*y, (y *), (x *))
-  -- fromInteger x = auto' (fromInteger x)
   fromInteger x = MkAD0 $ lift $ var (fromInteger x) 0 -- auto' (fromInteger x)
 
 export
 Neg a => Neg (AD s a) where
   (-) = op2Num $ \x,y => (x - y, id, negate)
-  negate x = 0 - x -- TODO check this
+  negate = op1Num $ \x => (negate x, negate) -- 0 - x -- TODO check this
 
 -- signum : Neg a => AD s a a -> AD s a a
 -- signum = op1Num $ \x => (signum x, const 0)
 -- 
 -- Abs a => Abs (AD s a a) where
 --   abs = op1Num $ \x => (abs x, (* signum x))
-
-
-
 
 export
 FromDouble a => FromDouble (AD s a) where
@@ -275,7 +276,7 @@ FromDouble a => FromDouble (AD s a) where
 export
 Neg a => Fractional a => Fractional (AD s a) where
   (/) = op2Num $ \x,y => (x / y, (/ y), (\g => -g*x/(y*y) ))
-  -- recip = op1Num $ \x -> (recip x, (/(x*x)) . negate)
+  recip = op1Num $ \x => (recip x, (/(x*x)) . negate)
 
 export
 Neg a => Floating a => Floating (AD s a) where
@@ -314,20 +315,6 @@ Neg a => Floating a => Floating (AD s a) where
 --   one = oneNum
 --   add = addNum
 
--- covers right-nested (,) too
-export
-(Backprop a, Backprop b) => Backprop (a, b) where
-    zero (x,y) = (zero x, zero y)
-    one (x, y) = (one x, one y)
-    add (x1, y1) (x2, y2) = (add x1 x2, add y1 y2)
-
-export
-Backprop a => Backprop (Array s a) where
-  zero = map zero
-  one = map one
-  add = zipWithArray add
-
-
 
 -- | Evaluate (forward mode) and differentiate (reverse mode) a unary function, without committing to a specific numeric typeclass
 export
@@ -353,21 +340,21 @@ rad1g zeroa oneb f x = runST $ do
 
 -- | Evaluate (forward mode) and differentiate (reverse mode) a binary function, without committing to a specific numeric typeclass
 export
-rad2g  : a -- ^ zero
-      -> b -- ^ zero
-      -> c -- ^ one
+rad2g  : (a -> a) -- ^ zero
+      -> (b -> b) -- ^ zero
+      -> (c -> c) -- ^ one
       -> (forall s . AD s a -> AD s b -> AD s c)
       -> a -> b
       -> (c, (a, b)) -- ^ (result, adjoints)
 rad2g zeroa zerob onec f x y = runST $ do
-  xr <- var x zeroa
-  yr <- var y zerob
+  xr <- var x (zeroa x)
+  yr <- var y (zerob y)
   zr' <- evalContT $
     resetT $ do
       let
         z = f (MkAD0 (pure xr)) (MkAD0 (pure yr))
       zr <- unAD0 z
-      lift $ modifySTRef zr (mapDual (const onec))
+      lift $ modifySTRef zr (mapDual onec)
       pure zr
   (MkD z _) <- readSTRef zr'
   (MkD _ x_bar) <- readSTRef xr
@@ -418,12 +405,12 @@ rad1 = rad1g zero one
 -- >>> rad2 (\x y -> (x + y) * x) 3 2
 -- (15,(8,3))
 export
-rad2  : (Num a, Num b, Num c) =>
+rad2  : (Backprop a, Backprop b, Backprop c) =>
         (forall s . AD s a -> AD s b -> AD s c) -- ^ function to be differentiated
      -> a
      -> b
      -> (c, (a, b)) -- ^ (result, adjoints)
-rad2 = rad2g 0 0 1
+rad2 = rad2g zero zero one
 
 -- | Evaluate (forward mode) and differentiate (reverse mode) a function of a 'Traversable'
 --
@@ -447,14 +434,30 @@ grad  : (Traversable t, Num a, Num b) =>
      -> (b, t a) -- ^ (result, gradient vector)
 grad = radNg 0 1
 
-export
-sqNorm : Num a => List a -> a
-sqNorm xs = sum $ zipWith (*) xs xs
-
-export
-p : List Double
-p = [4.1, 2.0]
+-- export
+-- sqNorm : Num a => List a -> a
+-- sqNorm xs = sum $ zipWith (*) xs xs
+-- 
+-- export
+-- p : List Double
+-- p = [4.1, 2.0]
 
 -- >>> grad sqNorm p
 -- (20.81,[8.2,4.0])
 
+export
+gradBP : (Backprop a, Backprop b) => (forall s . AD s a -> AD s b) -> a -> a
+gradBP f = snd . rad1 f
+
+export
+gradBP2 : (Backprop a, Backprop b, Backprop c) => (forall s . AD s a -> AD s b -> AD s c) -> a -> b -> (a,b)
+gradBP2 f x y = snd $ rad2 f x y
+
+-- i feel eval is modifying the state when it shoulnd't
+export
+evalBP : (Backprop a, Backprop b) => (forall s . AD s a -> AD s b) -> a -> b
+evalBP f x = fst $ rad1 f x
+
+export
+evalBP2 : (Backprop a, Backprop b, Backprop c) => (forall s . AD s a -> AD s b -> AD s c) -> a -> b -> c
+evalBP2 f x y = fst $ rad2 f x y

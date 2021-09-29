@@ -4,10 +4,16 @@ import Control.Monad.State
 
 import public BP.Backprop
 
+import public BP.Generic
+
 import Data.Strong.Matrix
 import Data.Strong.Array
 import Data.Strong.Array.Interfaces
 import Numeric.Floating
+
+import Control.Monad.Trans
+import public Control.Monad.ST
+import public Control.Monad.Cont
 
 import public Data.Stream
 
@@ -15,47 +21,117 @@ import Net.Activation
 
 import Util
 
--- import BP.Backprop
+-- import BP.Generic
 
 import Generics.Derive
+import Generics.Newtype
 %language ElabReflection
 
+
+public export
+data Raf = MkRaf Double
+%runElab derive "Raf"
+  [Generic, Eq, Ord, Num, Neg, Abs, Fractional, FromDouble]
+
+public export
+data Raff a b = MkRaff a b
+%runElab derive "Raff"
+  [Generic, Eq, Ord, Num, Neg, Abs, Fractional, FromDouble, Integral]
+
+
+export
+Backprop a => Backprop (Array s a) where
+  zero = map zero
+  one = map one
+  add = zipWithArray add
+
+export
+Backprop a => Backprop (Matrix h w a) where
+  zero = imapMatrix (\_,_ => zero)
+  one = imapMatrix (\_,_ => one)
+  add = zipWithMatrix add
+
+export
+Show a => Show (Matrix h w a) where
+  show = prettyMatrix
+
+export
+{h:_} -> {w:_} -> Num a => Num (Matrix h w a) where
+  (+) = zipWithMatrix (+)
+  (*) = zipWithMatrix (*)
+  fromInteger x = newMatrix' (fromInteger x)
+
+export
+{h:_} -> {w:_} -> Neg a => Neg (Matrix h w a) where
+  (-) = zipWithMatrix (-)
+  negate = imapMatrix (\_,_,x => negate x)
+
+export
+{h:_} -> {w:_} -> FromDouble a => FromDouble (Matrix h w a) where
+  fromDouble x = newMatrix' (fromDouble x)
+
+public export
 L : (o : Nat) -> (i : Nat) -> Type
 L o i = Matrix o i Double
 
+public export
 R : (o : Nat) -> Type
 R o = Array o Double
 
--- Still not sure how to translate properly:
--- type Model p a b = forall z. AD z p -> AD z a -> AD z b
-public export
-Model : {z : Type} -> Type -> Type -> Type -> Type
-Model p a b = AD z p -> AD z a -> AD z b
-
-
 infixr 7 :&
 infixr 7 :&&
+
+vec2 : AD s Double -> AD s Double -> AD s (R 2)
+vec2 = op2' (\x,y => (fromList [x,y], ((`readArray`0), (`readArray`1))))
+
+public export
+data Tup2 : Type -> Type -> Type where
+  MkT2 : a -> b -> Tup2 a b
+
+%runElab derive "Tup2"
+  [Generic,Meta,Eq,Ord,DecEq,Show,Num,Neg,Abs,Fractional,FromDouble,Backprop]
+
+public export
+data Tup3 : Type -> Type -> Type -> Type where
+  MkT3 : a -> b -> c -> Tup3 a b c
+
+%runElab derive "Tup3"
+  [Generic,Meta,Eq,Ord,DecEq,Show,Num,Neg,Abs,Fractional,FromDouble,Backprop]
+
+public export
+data Tup4 : Type -> Type -> Type -> Type -> Type where
+  MkT4 : a -> b -> c -> d -> Tup4 a b c d
+
+%runElab derive "Tup4"
+  [Generic,Meta,Eq,Ord,DecEq,Show,Num,Neg,Abs,Fractional,FromDouble,Backprop]
+
+public export
+data Tup5 : Type -> Type -> Type -> Type -> Type -> Type where
+  MkT5 : a -> b -> c -> d -> e -> Tup5 a b c d e
+
+%runElab derive "Tup5"
+  [Generic,Meta,Eq,Ord,DecEq,Show,Num,Neg,Abs,Fractional,FromDouble,Backprop]
+
 public export
 data (:&) : Type -> Type -> Type where
   (:&&) : a -> b -> a :& b
 
-export
-Show a => Show b => Show (a :& b) where
-  show (a :&& b) = "(" ++ show a ++ " :&& " ++ show b ++ ")"
+%runElab derive ":&"
+  [Generic,Meta,Eq,Ord,DecEq,Show,Num,Neg,Abs,Fractional,FromDouble,Backprop]
 
 export
-FromDouble a => FromDouble b => FromDouble (a :& b) where
-  fromDouble x = fromDouble x :&& fromDouble x
+Functor (a :&) where
+  map f (x :&& y) = x :&& f y
 
 export
 Bifunctor (:&) where
   bimap f g (x :&& y) = f x :&& g y
 
-export
-Backprop a => Backprop b => Backprop (a :& b) where
-  zero (x :&& y)= zero x :&& zero y
-  one (x :&& y) = one x :&& one y
-  add (x1 :&& y1) (x2 :&& y2) = add x1 x2 :&& add y1 y2
+-- export
+-- Backprop a => Backprop b => Backprop (a :& b) where
+--   zero (x :&& y)= zero x :&& zero y
+--   one (x :&& y) = one x :&& one y
+--   add (x1 :&& y1) (x2 :&& y2) = add x1 x2 :&& add y1 y2
 
 export
 fst : a :& b -> a
@@ -65,44 +141,65 @@ export
 snd : a :& b -> b
 snd (_ :&& y) = y
 
-export
-Num a => Num b => Num (a :& b) where
-   (x1 :&& y1) + (x2 :&& y2) = (x1 + x2) :&& (y1 + y2)
-   (x1 :&& y1) * (x2 :&& y2) = (x1 * x2) :&& (y1 * y2)
-   fromInteger x = (fromInteger x) :&& (fromInteger x)
+-- Other variations of this I've tried didn't modify rda0 properly, breaking the
+-- relation neccesary for backpropogation. This seems to be correct currently.
 
-export
-Neg a => Neg b => Neg (a :& b) where
-  (x1 :&& y1) - (x2 :&& y2) = (x1 - x2) :&& (y1 - y2)
-  negate (x :&& y) = negate x :&& negate y
-
+||| We don't have viewpatterns in idris yet so out2 and in2 do the job of
+||| managing tupled AD arguments.
 export
 out2 : Backprop a => Backprop b => AD z (a :& b) -> (AD z a) :& (AD z b)
-out2 p = let fst = op1' (\(x :&& y) => (x, (\x => x :&& y))) p
-             snd = op1' (\(x :&& y) => (y, (\y => x :&& y))) p
-         in fst :&& snd
+out2 p = op1 zero (\rda0,gyd => mapFst (`add` fst gyd) rda0)
+                  (\(x :&& y) => (x, (:&& y))) p
+     :&& op1 zero (\rda0,gyd => mapSnd (`add` snd gyd) rda0)
+                  (\(x :&& y) => (y, (x :&&))) p
+
+-- for testing against out2, using out2 twice instead of out3 once works exactly the same
+export
+out3 : Backprop a => Backprop b => Backprop c => AD z (Tup3 a b c) -> Tup3 (AD z a) (AD z b) (AD z c)
+out3 p = MkT3
+     (op1 zero (\(MkT3 da db dc),(MkT3 gda gdb gdc) => MkT3 (gda `add` da) db dc)
+                  (\(MkT3 x y z) => (x, (\x => MkT3 x y z))) p)
+     (op1 zero (\(MkT3 da db dc),(MkT3 gda gdb gdc) => MkT3 da (gdb `add` db) dc)
+                  (\(MkT3 x y z) => (y, (\y => MkT3 x y z))) p)
+     (op1 zero (\(MkT3 da db dc),(MkT3 gda gdb gdc) => MkT3 da db (gdc `add` dc))
+                  (\(MkT3 x y z) => (z, (\z => MkT3 x y z))) p)
 
 export
 in2 : Backprop a => Backprop b => AD z a -> AD z b -> AD z (a :& b)
-in2 = op2' (\x,y => (x :&& y, (fst,snd)))
+in2 = op2' (\x,y => (x :&& y, (fst, snd)))
 
-{-
-pattern (:&&) :: (Backprop a, Backprop b, Reifies z W)
-              => BVar z a -> BVar z b -> BVar z (a :& b)
-pattern x :&& y <- (\xy -> (xy ^^. t1, xy ^^. t2)->(x, y))
-  where
-    (:&&) = isoVar2 (:&) (\case x :& y -> (x, y))
--}
-
--- linReg : Model (Double :& Double) Double Double
 export
 linReg : Num a => Backprop a => AD z (a :& a) -> AD z a -> AD z a
-linReg ab v with (out2 ab)
-  _ | x :&& y = y * v + x
+linReg ab x with (out2 ab)
+  _ | a' :&& b' = b' * x + a'
 
 export
-gradBP : (Backprop a, Backprop b) => (forall s . AD s a -> AD s b) -> a -> a
-gradBP f = snd . rad1 f
+linRegOut22 : Neg a => Num a => Backprop a => AD z (a :& a :& a) -> AD z a -> AD z a
+linRegOut22 ab x = case mapSnd out2 (out2 ab) of
+                    (a' :&& b' :&& z') => b' * x + a'
+
+-- these - z' ones need 0.01 traning rate
+export
+linRegOut22' : Neg a => Num a => Backprop a => AD z (a :& a :& a) -> AD z a -> AD z a
+linRegOut22' ab x = case mapSnd out2 (out2 ab) of
+                    (a' :&& b' :&& z') => b' * x + a' - z'
+
+-- Created to test against nested out2. Nested out2 turns out exacly the same.
+-- Thus later numerical errors aren't due to out2
+export
+linRegT3 : Neg a => Num a => Backprop a => AD z (Tup3 a a a) -> AD z a -> AD z a
+linRegT3 abc x = case out3 abc of
+                     (MkT3 a' b' z') => b' * x + a'
+
+-- these - z' ones need 0.01 traning rate
+export
+linRegT3' : Neg a => Num a => Backprop a => AD z (Tup3 a a a) -> AD z a -> AD z a
+linRegT3' abc x = case out3 abc of
+                     (MkT3 a' b' z') => b' * x + a' - z'
+
+export
+linRegSamps : List (Double, Double)
+linRegSamps = [(1,1),(2,3),(3,5),(4,7),(5,9)]
 
 export
 squaredErrorGrad : (Backprop p, Backprop b, Num a, Num b, Neg b)
@@ -114,6 +211,15 @@ squaredErrorGrad : (Backprop p, Backprop b, Num a, Num b, Neg b)
 squaredErrorGrad f x targ = gradBP $ \p => (f p (auto'' x) - auto'' targ) ^ 2
 
 export
+squaredErrorGrad' : (Backprop p, Backprop b, Num a, Num b, Neg b)
+    => (forall z. AD z p -> AD z a -> AD z b)      -- ^ Model
+    -> a                -- ^ Observed input
+    -> b                -- ^ Observed output
+    -> p                -- ^ Parameter guess
+    -> (b,p)                -- ^ Gradient
+squaredErrorGrad' f x targ = rad1 $ \p => (f p (auto'' x) - auto'' targ) ^ 2
+
+export
 trainModel
      : Backprop p
     => Num b
@@ -122,71 +228,195 @@ trainModel
     => FromDouble p
     => Neg p
     => Backprop b
-    => (forall z. AD z p -> AD z a -> AD z b)      -- ^ model to train
+    => p -- learningrate
+    -> (forall z. AD z p -> AD z a -> AD z b)      -- ^ model to train
     -> p                -- ^ initial parameter guess
     -> List (a,b)          -- ^ list of observations
     -> p                -- ^ updated parameter guess
-trainModel f = foldl $ \p,(x,y) => p - 0.1 * squaredErrorGrad f x y p
+trainModel r f = foldl $ \p,(x,y) => p - r * squaredErrorGrad f x y p
 
 export
-samps : List (Double,Double)
-samps = [(1,1),(2,3),(3,5),(4,7),(5,9)]
-
-
-
-export
-linReg' : AD z Double -> AD z Double -> AD z Double
-linReg' a b = b * 5 + a
+scanl : (res -> a -> res) -> res -> List a -> List res
+scanl f q []      = [q]
+scanl f q (x::xs) = q :: scanl f (f q x) xs
 
 export
-linRegTest : AD z Double -> AD z Double
-linRegTest = linReg (in2 0.5 (-0.1))
+trainModel'
+     : Backprop p
+    => Num b
+    => Num a
+    => Neg b
+    => FromDouble p
+    => Neg p
+    => Backprop b
+    => p -- learningrate
+    -> (forall z. AD z p -> AD z a -> AD z b)      -- ^ model to train
+    -> p                -- ^ initial parameter guess
+    -> List (a,b)          -- ^ list of observations
+    -> List p                -- ^ updated parameter guess
+trainModel' r f = BP.scanl $ \p,(x,y) => p - r * squaredErrorGrad f x y p
 
 export
-linRegTest' : (Double, (Double :& Double, Double))
-linRegTest' = rad2 linReg (0.5 :&& (-0.1)) 5
+linRegTest : Double :& Double
+linRegTest =
+  trainModel 0.1 linReg (10.0 :&& -9.0) (take 5000 $ cycle [(1,1),(2,3),(3,5),(4,7),(5,9)])
 
-
-
-
+export
 app  : Backprop (Matrix m n a)
     => Backprop (Array n a)
+    => Backprop (Array m a)
+    => Num a
     => AD z (Matrix m n a)
     -> AD z (Array n a)
     -> AD z (Array m a)
--- app = op2 (zeroNum 0) addNum addNum $ \xs y ->
---     ( xs `H.app` y
---     , \d -> (d `H.outer` y, H.tr xs `H.app` d)
---     )
+app = op2' $ \xs,y =>
+    ( xs #> y
+    , (\dc => dc `outer` y) -- |A = |CB^T
+    , (\dc => tr xs #> dc)) -- |B = A^T|C
 
--- export
--- dot  : {s:_} -> Num a
---     => Backprop (Array s a)
---     => AD z (Array s a)
---     -> AD z (Array s a)
---     -> AD z a
--- dot = op2 zeroNum addNum addNum $ \x,y =>
---     ( x `dotArray` y
---     , (\d => newArray' d * y)
---     , (\d => newArray' d * y))
+export
+dot  : Num a
+    => Backprop a
+    => Backprop (Array s a)
+    => AD z (Array s a)
+    -> AD z (Array s a)
+    -> AD z a
+dot = op2' $ \x,y =>
+    ( x `dotArray` y
+    , (\dc => mapArray (const dc) y * y)  -- |A = |CB^T
+    , (\dc => x * mapArray (const dc) x)) -- |B = A^T|C
 
--- 
--- 
--- (#>) : AD' z (L h w) -> AD' z (R w) -> AD' z (R h)
--- x #> y = app x y
+export
+(#>) : AD z (L h w) -> AD z (R w) -> AD z (R h)
+x #> y = app x y
+
+Model' : {z : Type} -> (p : Type) -> (s : Type) -> (a : Type) -> (b : Type) -> Type
+Model' p s a b = AD z p -> AD z s -> AD z a -> AD z b
+
+Optional : Maybe Type -> Type
+Optional (Just x) = x
+Optional Nothing = Void
+
+data RealizedModel : Type where
+  MkRM : paramsTy -> Model' paramsTy (Optional stateTy) a b -> RealizedModel
+
+--------------------------------------------------
+-- FFNN
+--------------------------------------------------
+
+-- this doens't seem to work any better than logistic
+logisticOp : Backprop a => Neg a => Floating a => AD s a -> AD s a
+logisticOp = op1' $ \x =>
+    let lx = logistic x
+    in  (lx, \g => lx * (1 - lx) * g)
 
 public export
-ModelS : Type -> Type -> Type -> Type -> Type
-ModelS p s a b = {z : _} -> AD z p -> AD z a -> AD z s -> (AD z b, AD z s)
+Model : {z : Type} -> (p : Type) -> (a : Type) -> (b : Type) -> Type
+Model p a b =  AD z p -> AD z a -> AD z b
 
--- ar2 : ModelS (Double, Double, Double) Double Double Double
--- ar2 (BV (c,y1,y2)) (BV yLast) (BV yLastLast)
---   = (BV $ c + y1 * yLast + y2 * yLastLast, BV yLast)
--- 
+-- logistic : Neg a => Floating a => a -> a
+-- logistic x = 1 / (1 + exp (-x))
 
--- ar2' : ModelS (Double, Double, Double) Double Double Double
--- ar2' p yLast yLastLast with (out3 p)
-  -- _ | (c,y1,y2) = (c + y1 * yLast + y2 * yLastLast, yLast)
+export
+feedForwardLog : {o:_} -> Model (L o i :& R o) (R i) (R o)
+feedForwardLog wb x with (out2 wb)
+  _ | (w :&& b) = logistic (w #> x + b)
+
+export
+logReg : Model (Double :& Double) Double Double
+logReg ab = logistic . linReg ab
+
+export
+andSamps : List (Array 2 Double, Array 1 Double)
+andSamps = [(fromList [0,0], 0), (fromList [1,0], 0), (fromList [0,1], 0), (fromList [1,1], 1)]
+
+export
+feedForward : {o:_} -> Model (L o i :& R o) (R i) (R o)
+feedForward wb x with (out2 wb)
+  _ | (w :&& b) = w #> x + b
+
+export
+feedForwardLog' : {o:_} -> Model (L o i :& R o) (R i) (R o)
+feedForwardLog' wb = logistic . feedForward wb
+
+export
+konst : {n:_} -> AD z Double -> AD z (R n)
+konst = op1' (\x => (newArray' x, sumArray)) -- sumArray seems, wrong? shouldn't it be like  sumArray / s
+
+export
+sumElements : {n:_} -> Num a => Backprop a => AD z (R n) -> AD z Double
+sumElements = op1' (\a => (sumArray a, newArray')) -- shouldn't it be newArray' (xs/s)
+
+-- untested, doesn't seem to work
+export
+softMax : {n:_} -> AD z (R n) -> AD z (R n)
+softMax x = let expx = exp x
+            in konst (1 / sumElements expx) * expx
+
+-- untested
+export
+feedForwardSoftMax : {o:_} -> Model (L o i :& R o) (R i) (R o)
+feedForwardSoftMax wb = softMax . feedForward wb
+
+export
+xorSamps : List (Array 2 Double, Array 1 Double)
+xorSamps = [(fromList [0,0], 0), (fromList [1,0], 1), (fromList [0,1], 1), (fromList [1,1], 0)]
+
+
+
+-- feedForwardLog' seems to work fine up to this point
+
+infixr 8 <~
+export
+-- have to specify that the z are the same
+(<~) : (Backprop p, Backprop q)
+    => Model {z}  p       b c
+    -> Model {z}       q  a b
+    -> Model {z} (p :& q) a c
+(f <~ g) pq with (out2 pq)
+  _ | (p' :&& q') = f p' . g q'
+
+-- twoLayer computes andSamps fairly, but not xorSamps
+-- :exec printLn $ evalBP2 twoLayer (trainModel 0.1 twoLayer 0.5 (take 10000 $ cycle xorSamps)) (fromList [1,1])
+-- three layers doesn't fair any better. How can feedForwardLog work but not
+-- twoLayer? They use the same derivation math and I've shown :& to be safe
+-- elsewhere. three layers is worse on andSamps. Way worse, pathetically worse.
+-- Bafflingly worse. More layer moves xorSamps closer and closer to 0.5
+export
+twoLayer : Model ? (R 2) (R 1)
+twoLayer = feedForwardLog' {i=4} <~ feedForwardLog'
+
+export
+threeLayer : Model ? (R 2) (R 1)
+threeLayer = feedForwardLog' {i=4} <~ feedForwardLog' {i=4} <~ feedForwardLog'
+
+-- progressively less accurate, or rather progressively closer to 0.5
+export
+fourLayer : Model ? (R 2) (R 1)
+fourLayer = feedForwardLog' {i=4} <~ feedForwardLog' {i=4} <~ feedForwardLog' {i=4} <~ feedForwardLog'
+
+--------------------------------------------------
+-- RNN
+--------------------------------------------------
+
+
+
+public export
+-- %tcinline
+ModelS : {z : Type} -> (p : Type) -> (s: Type) -> (a : Type) -> (b : Type) -> Type
+ModelS p s a b = AD z p -> AD z a -> AD z s -> (AD z b, AD z s)
+
+export
+ar2 : AD z (Double :& Double :& Double) -> AD z Double -> AD z Double -> (AD z Double, AD z Double)
+ar2 p yLast yLastLast
+  = case mapSnd out2 (out2 p) of
+      (c :&& y1 :&& y2) => (c + y1 * yLast + y2 * yLastLast, yLast)
+
+export
+ar2' : ModelS (Double :& Double :& Double) Double Double Double
+ar2' p yLast yLastLast
+  = case mapSnd out2 (out2 p) of
+      (c :&& y1 :&& y2) => (c + y1 * yLast + y2 * yLastLast, yLast)
 
 
 
@@ -214,9 +444,9 @@ fcarnn' p x s with (out4 p)
 infixr 8 <*~*
 (<*~*)
   : (Backprop p, Backprop q, Backprop s, Backprop t)
-    => ModelS  p     s    b c
-    -> ModelS    q     t  a b
-    -> ModelS (p,q) (s,t) a c
+    => ModelS {z}  p     s    b c
+    -> ModelS {z}    q     t  a b
+    -> ModelS {z} (p,q) (s,t) a c
 (f <*~* g) (BV (p, q)) x (BV (s, t)) =
   let (y, BV t') = g (BV q) x (BV t)
       (z, BV s') = f (BV p) y (BV s)
@@ -225,25 +455,19 @@ infixr 8 <*~*
 infixr 8 <*~
 (<*~)
    : (Backprop p, Backprop q)
-    => Model   p         b c
-    -> ModelS       q  s a b
-    -> ModelS (p,   q) s a c
+    => Model  {z}  p         b c
+    -> ModelS {z}       q  s a b
+    -> ModelS {z} (p,   q) s a c
 (f <*~ g) (BV (p, q)) x = mapFst (f (BV p)) . g (BV q) x
 
 mapS : (forall z. Ref z W => AD' z b -> AD' z c)
-    -> ModelS p s a b
-    -> ModelS p s a c
+    -> ModelS {z} p s a b
+    -> ModelS {z} p s a c
 -- mapS g f s a b = let (z,s') = f s a b in (g z,s')
 mapS f g p x = mapFst f . g p x
 
-toS : Model p a b -> ModelS p s a b
+toS : Model {z} p a b -> ModelS {z} p s a b
 toS f p x s = (f p x, s)
-
-feedForwardLog
-    : Model (L o i, R o) (R i) (R o)
-feedForwardLog (BV (w, b)) (BV x) = BV $ map logistic (w #> x + b)
-
--- feedForwardLog' : Model (L o i, R o) (R i) (R o)
 
 -- twoLayerRNN : ModelS _ (R 5,R 5) (R 20) (R 5)
 -- _ isn't good enough, we need to search via ?
@@ -264,3 +488,6 @@ unroll : ModelS p s a b -> ModelS p s (List a) (List b)
 unroll = ?dssffd
 
 -}
+
+main : IO ()
+main = pure ()
