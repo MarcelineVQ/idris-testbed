@@ -11,7 +11,7 @@ worker act ref = do
 
 export
 chunksOf : Nat -> List a -> List (List a)
-chunksOf Z xs = [xs]
+chunksOf Z xs = [xs] -- NB: Differs from some implementations where this is []
 chunksOf _ [] = []
 chunksOf k xs = let (r,s) = splitAt k xs
                 in r :: chunksOf k s

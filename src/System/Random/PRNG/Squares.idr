@@ -72,13 +72,13 @@ squares key ctr =
          `shiftR` thirtytwo
   where
     -- Don't `fromInteger 32` multiple times
-    thirtytwo : Subset Nat (`LT` 64)
-    thirtytwo = fromNat' 32
+    thirtytwo : Fin 64
+    thirtytwo = 32
     square : Bits64 -> Bits64
     square z = z * z
     -- rotate by 32 bits
     rotate : Bits64 -> Bits64
-    rotate z = shiftR z thirtytwo .|. shiftL z thirtytwo
+    rotate z = shiftR z thirtytwo .|. shiftL z thirtytwo -- TODO: Is this really rotation?
 
 -- The final rotation seems to result in Bits32 values?
 
@@ -95,13 +95,13 @@ squares2 key ctr = let x = cast ctr * key
                    in cast $ square x''' + z `shiftR` thirtytwo -- Round 4
   where
     -- Don't `fromInteger 32` multiple times
-    thirtytwo : Subset Nat (`LT` 64)
-    thirtytwo = fromNat' 32
+    thirtytwo : Fin 64
+    thirtytwo = 32
     square : Bits64 -> Bits64
     square z = z * z
     -- rotate by 32 bits
     rotate : Bits64 -> Bits64
-    rotate z = shiftR z thirtytwo .|. shiftL z thirtytwo
+    rotate z = shiftR z thirtytwo .|. shiftL z thirtytwo -- TODO: Is this really rotation?
 
 
 export

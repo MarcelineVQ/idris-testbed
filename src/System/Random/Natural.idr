@@ -9,9 +9,9 @@ replicateA : Applicative f => Nat -> f a -> f (List a)
 replicateA Z _ = pure []
 replicateA (S k) act = [| act :: replicateA k act |]
 
-public export
-subtract : Neg a => Num a => a -> a -> a
-subtract x y = x - y
+-- public export
+-- subtract : Neg a => Num a => a -> a -> a
+-- subtract x y = x - y
 
 -- (n,m) rather than [n,m]
 export

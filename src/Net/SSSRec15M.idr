@@ -35,6 +35,8 @@ import Util
 
 import TimeIt
 
+import System.Random.Types
+
 public export
 record StochasticEval where
   constructor MkStochasticEval

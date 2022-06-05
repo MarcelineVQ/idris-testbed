@@ -13,6 +13,10 @@ depends:
 - sqlite3
 - sarray
 - newtype-deriving
+- tailrec
+- rhone
+- rhone-js
+- dom 
 
-main: Net.AFSSS15M #Data.ArrayFire #BP #Net.SSSRec15M
+main: BP.Test #Net.AFAE #Net.AFSSS15M #Data.ArrayFire #BP #Net.SSSRec15M
 executable: Fef

@@ -21,6 +21,8 @@ import TimeIt
 
 import Util
 
+import System.Random.Types
+
 -- I want to predict what x bars from now will be, lets say 10 bars
 -- most direct choice is feed-forward on 100 bars at once, with
 -- high,low,open,close per bar. This means our input layer is 400 wide

@@ -1,6 +1,6 @@
 module Data.ArrayFire
 
-import System.FFI
+import public System.FFI
 
 import public Data.Vect
 import Data.Fin
@@ -11,9 +11,13 @@ import System.Random
 
 import Numeric.Floating
 
+import TimeIt
+
 import Util
 
-import Generics.Newtype
+import System.Random.Types
+
+import public Generics.Newtype
 %language ElabReflection
 
 -- Shorthand for our custom arrayfire helpers
@@ -47,10 +51,61 @@ data AFErr = AF_SUCCESS               -- =   0
            | AF_ERR_NO_HALF           -- = 403
            | AF_ERR_LOAD_LIB          -- = 501
            | AF_ERR_LOAD_SYM          -- = 502
-           | AF_ERR_ARR_BKND_MISMATCH -- = 503
+           | AF_ERR_ARR_BKND_MISMATCH -- = 503 -- most often caused by wrong/bad pointer
            | AF_ERR_INTERNAL          -- = 998
            | AF_ERR_UNKNOWN           -- = 999
-%runElab derive "AFErr" [Generic, Meta, Eq, Ord, Show]
+-- %runElab derive "AFErr" [Generic, Meta, Eq, Ord, Show]
+
+export
+Eq AFErr where
+  AF_SUCCESS == AF_SUCCESS = True
+  AF_ERR_NO_MEM == AF_ERR_NO_MEM = True
+  AF_ERR_DRIVER == AF_ERR_DRIVER = True
+  AF_ERR_RUNTIME == AF_ERR_RUNTIME = True
+  AF_ERR_INVALID_ARRAY == AF_ERR_INVALID_ARRAY = True
+  AF_ERR_ARG == AF_ERR_ARG = True
+  AF_ERR_SIZE == AF_ERR_SIZE = True
+  AF_ERR_TYPE == AF_ERR_TYPE = True
+  AF_ERR_DIFF_TYPE == AF_ERR_DIFF_TYPE = True
+  AF_ERR_BATCH == AF_ERR_BATCH = True
+  AF_ERR_DEVICE == AF_ERR_DEVICE = True
+  AF_ERR_NOT_SUPPORTED == AF_ERR_NOT_SUPPORTED = True
+  AF_ERR_NOT_CONFIGURED == AF_ERR_NOT_CONFIGURED = True
+  AF_ERR_NONFREE == AF_ERR_NONFREE = True
+  AF_ERR_NO_DBL == AF_ERR_NO_DBL = True
+  AF_ERR_NO_GFX == AF_ERR_NO_GFX = True
+  AF_ERR_NO_HALF == AF_ERR_NO_HALF = True
+  AF_ERR_LOAD_LIB == AF_ERR_LOAD_LIB = True
+  AF_ERR_LOAD_SYM == AF_ERR_LOAD_SYM = True
+  AF_ERR_ARR_BKND_MISMATCH == AF_ERR_ARR_BKND_MISMATCH = True
+  AF_ERR_INTERNAL == AF_ERR_INTERNAL = True
+  AF_ERR_UNKNOWN == AF_ERR_UNKNOWN = True
+  _ == _ = False
+
+export
+Show AFErr where
+  show AF_SUCCESS = "AF_SUCCESS"
+  show AF_ERR_NO_MEM = "AF_ERR_NO_MEM"
+  show AF_ERR_DRIVER = "AF_ERR_DRIVER"
+  show AF_ERR_RUNTIME = "AF_ERR_RUNTIME"
+  show AF_ERR_INVALID_ARRAY = "AF_ERR_INVALID_ARRAY"
+  show AF_ERR_ARG = "AF_ERR_ARG"
+  show AF_ERR_SIZE = "AF_ERR_SIZE"
+  show AF_ERR_TYPE = "AF_ERR_TYPE"
+  show AF_ERR_DIFF_TYPE = "AF_ERR_DIFF_TYPE"
+  show AF_ERR_BATCH = "AF_ERR_BATCH"
+  show AF_ERR_DEVICE = "AF_ERR_DEVICE"
+  show AF_ERR_NOT_SUPPORTED = "AF_ERR_NOT_SUPPORTED"
+  show AF_ERR_NOT_CONFIGURED = "AF_ERR_NOT_CONFIGURED"
+  show AF_ERR_NONFREE = "AF_ERR_NONFREE"
+  show AF_ERR_NO_DBL = "AF_ERR_NO_DBL"
+  show AF_ERR_NO_GFX = "AF_ERR_NO_GFX"
+  show AF_ERR_NO_HALF = "AF_ERR_NO_HALF"
+  show AF_ERR_LOAD_LIB = "AF_ERR_LOAD_LIB"
+  show AF_ERR_LOAD_SYM = "AF_ERR_LOAD_SYM"
+  show AF_ERR_ARR_BKND_MISMATCH = "AF_ERR_ARR_BKND_MISMATCH"
+  show AF_ERR_INTERNAL = "AF_ERR_INTERNAL"
+  show AF_ERR_UNKNOWN = "AF_ERR_UNKNOWN"
 
 public export
 Cast AFErr Int where
@@ -142,8 +197,9 @@ data DType = F32    -- ///< 32-bit floating point values
            | S16    -- ///< 16-bit signed integral values
            | U16    -- ///< 16-bit unsigned integral values
            | F16    -- ///< 16-bit floating point value
-%runElab derive "DType" [Generic, Meta, Eq, Ord, Show]
+-- %runElab derive "DType" [Generic, Meta, Eq, Ord, Show]
 
+public export
 FromDType : DType -> Type
 FromDType F32 = Double
 FromDType C32 = Void
@@ -159,6 +215,7 @@ FromDType S16 = Int32
 FromDType U16 = Bits32
 FromDType F16 = Double
 
+public export
 ToDType : Type -> DType
 ToDType Double = F64
 ToDType Bool = B8
@@ -358,19 +415,25 @@ export
 sizeOfAFArray : AFArray dims ty -> Int
 sizeOfAFArray (MkAFArray _ _ dims _) = cast $ product dims
 
+%inline
 wrapAPIFunc : (func : String) -> (msg : String) -> IO (Either AFErr a) -> a
-wrapAPIFunc func msg act =
-  either (\err => lieErrorCall "ArrayFire" func (msg ++ ": " ++ show err)) id (unsafePerformIO act)
+wrapAPIFunc func msg act = unsafePerformIO $ do
+  r <- act
+  either (\err => printLn err *> pure (believe_me "wrapAPIFailure \{func} \{msg}")) (pure . id) r
 
+%inline
 wrapIOAPIFunc : HasIO io => (func : String) -> (msg : String) -> io (Either AFErr a) -> io a
-wrapIOAPIFunc func msg act =
-  pure . either (\err => lieErrorCall "ArrayFire" func (msg ++ ": " ++ show err)) id =<< act
+wrapIOAPIFunc func msg act = do
+  r <- act
+  either (\err => printLn err *> pure (believe_me "wrapIOAPIFailure \{func} \{msg}")) (pure . id) r
 
 public export
 interface Storable a where
-  -- sizeOf : a -> Int
+  sizeOf : Int
   peek : HasIO io => Ptr a -> Int -> io a
   poke : HasIO io => Ptr a -> Int -> a -> io ()
+
+deref : Storable a => Ptr a -> a
 
 export %foreign libArrayFire "int_peek"
 int_peek : Ptr Int -> (offset : Int) -> PrimIO Int
@@ -378,10 +441,41 @@ int_peek : Ptr Int -> (offset : Int) -> PrimIO Int
 export %foreign libArrayFire "int_poke"
 int_poke : Ptr Int -> (offset : Int) -> Int -> PrimIO ()
 
+export %foreign libArrayFire "long_long_peek"
+long_long_peek : Ptr Int64 -> (offset : Int) -> PrimIO Int64
+
+export %foreign libArrayFire "long_long_poke"
+long_long_poke : Ptr Int64 -> (offset : Int) -> Int64 -> PrimIO ()
+
+export %foreign libArrayFire "double_peek"
+double_peek : Ptr Double -> (offset : Int) -> PrimIO Double
+
+export %foreign libArrayFire "double_poke"
+double_poke : Ptr Double -> (offset : Int) -> Double -> PrimIO ()
+
+public export
+Storable Double where
+  sizeOf = 8
+  peek ptr i = primIO (double_peek ptr i)
+  poke ptr i v = primIO $ double_poke ptr i v
+
 public export
 Storable Int where
+  sizeOf = 8
   peek ptr i = primIO (int_peek ptr i)
   poke ptr i v = primIO $ int_poke ptr i v
+
+public export
+Storable Int32 where
+  sizeOf = 4
+  peek ptr i = cast {from=Int} <$> peek (prim__castPtr $ prim__forgetPtr ptr) i
+  poke ptr i v = poke (prim__castPtr $ prim__forgetPtr ptr) i (cast {to=Int} v)
+
+public export
+Storable Int64 where
+  sizeOf = 8
+  peek ptr i = primIO (long_long_peek ptr i)
+  poke ptr i v = primIO $ long_long_poke ptr i v
 
 public export
 data Dim = MkDim Int
@@ -394,6 +488,7 @@ dim_poke : (newAfarray : Ptr Dim) -> (offset : Int) -> Int -> PrimIO ()
 
 public export
 Storable Dim where
+  sizeOf = 8
   peek ptr i = MkDim <$> primIO (dim_peek ptr i)
   poke ptr i (MkDim v) = primIO $ dim_poke ptr i v
 
@@ -402,6 +497,7 @@ getDereffedCAFArray (MkAFArray ptr _ _ _) = derefCafArray ptr
 
 --------------------------------------------------
 
+%inline -- these seem to break things if they're not inlined
 afNumOp1 : HasIO io => (op : GCPtr CAFArray -> CAFArray -> PrimIO Int) -> AFArray dims dt -> io (Either AFErr (AFArray dims dt))
 afNumOp1 op (MkAFArray xptr n dims dt) = do
     ptr <- allocAF
@@ -410,18 +506,38 @@ afNumOp1 op (MkAFArray xptr n dims dt) = do
       AF_SUCCESS => pure (Right (MkAFArray ptr n dims dt))
       err => pure (Left err)
 
-afNumOp2 : HasIO io => (op : GCPtr CAFArray -> CAFArray -> CAFArray -> Int -> PrimIO Int) -> AFArray dims dt -> AFArray dims dt -> io (Either AFErr (AFArray dims dt))
-afNumOp2 op (MkAFArray xptr n dims dt) (MkAFArray yptr _ _ _) = do
+%inline -- these seem to break things if they're not inlined
+afNumOp1B : HasIO io => (op : GCPtr CAFArray -> CAFArray -> Int -> PrimIO Int) -> AFArray dims dt -> (batch : Bool) -> io (Either AFErr (AFArray dims dt))
+afNumOp1B op (MkAFArray xptr n dims dt) b = do
     ptr <- allocAF
-    res <- primIO $ op ptr (derefCafArray xptr) (derefCafArray yptr) (cast False)
+    res <- primIO $ op ptr (derefCafArray xptr) (cast b)
     case cast res of
       AF_SUCCESS => pure (Right (MkAFArray ptr n dims dt))
       err => pure (Left err)
 
-afNumOp3 : HasIO io => (op : GCPtr CAFArray -> CAFArray -> CAFArray -> CAFArray -> Int -> PrimIO Int) -> AFArray dims dt -> AFArray dims dt -> AFArray dims dt -> io (Either AFErr (AFArray dims dt))
-afNumOp3 op (MkAFArray x n' dims dt) y z = do
+%inline -- these seem to break things if they're not inlined
+afNumOp2 : HasIO io => (op : GCPtr CAFArray -> CAFArray -> CAFArray -> PrimIO Int) -> AFArray dims dt -> AFArray dims dt -> io (Either AFErr (AFArray dims dt))
+afNumOp2 op (MkAFArray xptr n dims dt) (MkAFArray yptr _ _ _) = do
     ptr <- allocAF
-    AF_SUCCESS <- map cast . primIO $ op ptr (derefCafArray x) (getDereffedCAFArray y) (getDereffedCAFArray z) (cast False)
+    res <- primIO $ op ptr (derefCafArray xptr) (derefCafArray yptr)
+    case cast res of
+      AF_SUCCESS => pure (Right (MkAFArray ptr n dims dt))
+      err => pure (Left err)
+
+%inline -- these seem to break things if they're not inlined
+afNumOp2B : HasIO io => (op : GCPtr CAFArray -> CAFArray -> CAFArray -> Int -> PrimIO Int) -> AFArray dims dt -> AFArray dims dt -> (batch : Bool) -> io (Either AFErr (AFArray dims dt))
+afNumOp2B op (MkAFArray xptr n dims dt) (MkAFArray yptr _ _ _) b = do
+    ptr <- allocAF
+    res <- primIO $ op ptr (derefCafArray xptr) (derefCafArray yptr) (cast b)
+    case cast res of
+      AF_SUCCESS => pure (Right (MkAFArray ptr n dims dt))
+      err => pure (Left err)
+
+%inline -- these seem to break things if they're not inlined
+afNumOp3B : HasIO io => (op : GCPtr CAFArray -> CAFArray -> CAFArray -> CAFArray -> Int -> PrimIO Int) -> AFArray dims dt -> AFArray dims dt -> AFArray dims dt -> (batch : Bool) -> io (Either AFErr (AFArray dims dt))
+afNumOp3B op (MkAFArray x n' dims dt) y z b = do
+    ptr <- allocAF
+    AF_SUCCESS <- map cast . primIO $ op ptr (derefCafArray x) (getDereffedCAFArray y) (getDereffedCAFArray z) (cast b)
       | err => pure (Left err)
     pure (Right (MkAFArray ptr n' dims dt))
 
@@ -430,28 +546,28 @@ af_add : (newAFarray : GCPtr CAFArray) -> (lhs : CAFArray) -> (rhs : CAFArray) -
 
 export
 afAdd : HasIO io => AFArray dims dt -> AFArray dims dt -> io (Either AFErr (AFArray dims dt))
-afAdd = afNumOp2 af_add
+afAdd x y = afNumOp2B af_add x y False
 
 export %foreign libArrayFire "af_sub"
 af_sub : (newAfarray : GCPtr CAFArray) -> (lhs : CAFArray) -> (rhs : CAFArray) -> (bool : Int) -> PrimIO Int
 
 export
 afSub : HasIO io => AFArray dims dt -> AFArray dims dt -> io (Either AFErr (AFArray dims dt))
-afSub = afNumOp2 af_sub
+afSub x y = afNumOp2B af_sub x y False
 
 export %foreign libArrayFire "af_mul"
 af_mul : (newAfarray : GCPtr CAFArray) -> (lhs : CAFArray) -> (rhs : CAFArray) -> (bool : Int) -> PrimIO Int
 
 export
 afMul : HasIO io => AFArray dims dt -> AFArray dims dt -> io (Either AFErr (AFArray dims dt))
-afMul = afNumOp2 af_mul
+afMul x y = afNumOp2B af_mul x y False
 
 export %foreign libArrayFire "af_div"
 af_div : (newAfarray : GCPtr CAFArray) -> (lhs : CAFArray) -> (rhs : CAFArray) -> (bool : Int) -> PrimIO Int
 
 export
 afDiv : HasIO io => AFArray dims dt -> AFArray dims dt -> io (Either AFErr (AFArray dims dt))
-afDiv = afNumOp2 af_div
+afDiv x y = afNumOp2B af_div x y False
 
 export %foreign libArrayFire "af_abs"
 af_abs : (newAfarray : GCPtr CAFArray) -> (lhs : CAFArray) -> PrimIO Int
@@ -467,12 +583,23 @@ export
 afExp : HasIO io => AFArray dims dt -> io (Either AFErr (AFArray dims dt))
 afExp = afNumOp1 af_exp
 
+export %foreign libArrayFire "af_expm1"
+af_expm1 : (newAfarray : GCPtr CAFArray) -> (lhs : CAFArray) -> PrimIO Int
+
+export
+afExpM1 : HasIO io => AFArray dims dt -> io (Either AFErr (AFArray dims dt))
+afExpM1 = afNumOp1 af_expm1
+
+export
+expM1 : AFArray dims dt -> AFArray dims dt
+expM1 x = wrapAPIFunc "afExpM1" "expM1" $ afExpM1 x
+
 export %foreign libArrayFire "af_pow"
 af_pow : (newAfarray : GCPtr CAFArray) -> (lhs : CAFArray) -> (rhs : CAFArray) -> (bool : Int) -> PrimIO Int
 
 export
 afPow : HasIO io => AFArray dims dt -> AFArray dims dt -> io (Either AFErr (AFArray dims dt))
-afPow = afNumOp2 af_pow
+afPow x y = afNumOp2B af_pow x y False
 
 export %foreign libArrayFire "af_log"
 af_log : (newAfarray : GCPtr CAFArray) -> (lhs : CAFArray) -> PrimIO Int
@@ -562,6 +689,27 @@ export
 sigmoid : AFArray dims dt -> AFArray dims dt
 sigmoid x = wrapAPIFunc "afSigmoid" "sigmoid" $ afSigmoid x
 
+export %inline
+logistic : AFArray dims dt -> AFArray dims dt
+logistic = sigmoid
+
+-------------------------------------------------
+export %foreign libArrayFire "af_transpose"
+af_transpose : (newAFarray : GCPtr CAFArray) -> (lhs : CAFArray) -> (conj : Int) -> PrimIO Int
+
+export
+afTranspose : HasIO io => AFArray dim dt -> io (Either AFErr (AFArray (reverse dim) dt))
+afTranspose (MkAFArray xptr n dim dt) with (reverse dim)
+  _ | mid = afNumOp1B af_transpose (MkAFArray xptr n mid dt) False
+
+-- afTranspose x = afNumOp1B af_transpose x False
+    -- AFAPI af_err af_transpose(af_array *out, const af_array in, const int dim);
+
+export
+transpose : AFArray dim dt -> AFArray (reverse dim) dt
+transpose x = wrapAPIFunc "afTranspose" "transpose" $ afTranspose x
+    -- AFAPI af_err af_transpose(af_array *out, af_array in, const bool conjugate);
+
 --------------------------------------------------
 
 -- booleans
@@ -571,7 +719,7 @@ af_and : (newAFarray : GCPtr CAFArray) -> (lhs : CAFArray) -> (rhs : CAFArray) -
 
 export
 afAnd : HasIO io => AFArray dims dt -> AFArray dims dt -> io (Either AFErr (AFArray dims dt))
-afAnd = afNumOp2 af_and
+afAnd x y = afNumOp2B af_and x y False
     -- AFAPI af_err af_le    (af_array *out, const af_array lhs, const af_array rhs, const bool batch);
 
 export
@@ -583,7 +731,7 @@ af_le : (newAFarray : GCPtr CAFArray) -> (lhs : CAFArray) -> (rhs : CAFArray) ->
 
 export
 afLe : HasIO io => AFArray dims dt -> AFArray dims dt -> io (Either AFErr (AFArray dims dt))
-afLe = afNumOp2 af_le
+afLe x y = afNumOp2B af_le x y False
     -- AFAPI af_err af_le    (af_array *out, const af_array lhs, const af_array rhs, const bool batch);
 
 export
@@ -605,6 +753,21 @@ afMax (MkAFArray xptr (S n) (dim :: r) dt) = do
     pure (Right (MkAFArray ptr 1 [dim] dt))
     -- AFAPI af_err af_max(af_array *out, const af_array in, const int dim);
 
+export
+maximum : AFArray (dim :: _) dt -> AFArray [dim] dt
+maximum x = wrapAPIFunc "afMax" "max" $ afMax x
+
+export %foreign libArrayFire "af_maxof"
+af_maxof : (newAFarray : GCPtr CAFArray) -> (lhs : CAFArray) -> (rhs : CAFArray) -> (batch : Int) -> PrimIO Int
+
+export
+afMaxOf : HasIO io => AFArray dim dt -> AFArray dim dt -> io (Either AFErr (AFArray dim dt))
+afMaxOf x y = afNumOp2B af_maxof x y False
+
+export
+max : AFArray dim dt -> AFArray dim dt -> AFArray dim dt
+max x y = wrapAPIFunc "afMaxOf" "max" $ afMaxOf x y
+
 
 export %foreign libArrayFire "af_min"
 af_min : (newAFarray : GCPtr CAFArray) -> (lhs : CAFArray) -> (dim : Int) -> PrimIO Int
@@ -619,8 +782,19 @@ afMin (MkAFArray xptr (S n) (dim :: r) dt) = do
     -- AFAPI af_err af_min(af_array *out, const af_array in, const int dim);
 
 export
-min : AFArray (dim :: _) dt -> AFArray [dim] dt
-min x = wrapAPIFunc "afMin" "min" $ afMin x
+minimum : AFArray (dim :: _) dt -> AFArray [dim] dt
+minimum x = wrapAPIFunc "afMin" "min" $ afMin x
+
+export %foreign libArrayFire "af_minof"
+af_minof : (newAFarray : GCPtr CAFArray) -> (lhs : CAFArray) -> (rhs : CAFArray) -> (batch : Int) -> PrimIO Int
+
+export
+afMinOf : HasIO io => AFArray dim dt -> AFArray dim dt -> io (Either AFErr (AFArray dim dt))
+afMinOf x y = afNumOp2B af_minof x y False
+
+export
+min : AFArray dim dt -> AFArray dim dt -> AFArray dim dt
+min x y = wrapAPIFunc "afMinOf" "min" $ afMinOf x y
 
 --------------------------------------------------
 
@@ -731,6 +905,22 @@ afCreateArray datas dt dims = do
       pure $ Right $ rewrite sym (lengthCorrect dims) in MkAFArray ptr (length dims) dims' dt
     -- AFAPI af_err af_create_array(af_array *arr, const void * const data, const unsigned ndims, const dim_t * const dims, const af_dtype type);
 
+export %foreign libArrayFire "af_create_array"
+af_create_array' : (newAFarray : GCPtr CAFArray) -> AnyPtr -> (dimslen : Int) -> (dims : Ptr Dim) -> (dtype : Int) -> PrimIO Int
+
+export
+afCreateArray' : HasIO io => AnyPtr -> (dt : DType) -> (dims : Vect n Nat) -> io (Either AFErr (AFArray dims dt))
+afCreateArray' datas dt dims = do
+    let dimcount = cast (length dims)
+    alloc' (size_of_dim_t * dimcount) $ \dimbuf => do
+      ptr <- allocAF
+      AF_SUCCESS <- map cast . primIO $ af_create_array' ptr datas dimcount !(fillDims dims dimbuf) (cast dt)
+        | err =>  pure (Left err)
+      let dims' : Vect (length dims) Nat
+          dims' = rewrite lengthCorrect dims in dims
+      pure $ Right $ rewrite sym (lengthCorrect dims) in MkAFArray ptr (length dims) dims' dt
+    -- AFAPI af_err af_create_array(af_array *arr, const void * const data, const unsigned ndims, const dim_t * const dims, const af_dtype type);
+
 export
 createArrayIO : HasIO io => Buffer -> (dt : DType) -> (dims : Vect n Nat) -> io (AFArray dims dt)
 createArrayIO b dt dims = wrapIOAPIFunc "afCreateArray" "createArray" $ afCreateArray b dt dims
@@ -831,6 +1021,29 @@ export
 constant : (dt : DType) -> (dims : Vect n Nat) -> Double -> AFArray dims dt
 constant dt dims d = wrapAPIFunc "afConstant" "constant" (afConstant dt dims d)
 
+export
+constant' : {dt : DType} -> {dims : Vect n Nat} -> Double -> AFArray dims dt
+constant' d = wrapAPIFunc "afConstant" "constant" (afConstant dt dims d)
+
+export %foreign libArrayFire "af_tile"
+af_tile : (newAFarray : GCPtr CAFArray) -> (lhs : CAFArray) -> (xc : Int) -> (yc : Int) -> (zc : Int) -> (wc : Int) -> PrimIO Int
+
+export
+afTile : HasIO io => AFArray dims dt -> (x,y,z,w : Nat) -> io (Either AFErr (AFArray dims' dt))
+afTile (MkAFArray lptr n dims dt) x y z w = do
+    -- let dimcount = cast (length dims)
+    ptr <- allocAF
+    AF_SUCCESS <- map cast . primIO $ af_tile ptr (derefCafArray lptr) (cast x) (cast y) (cast z) (cast w)
+      | err =>  pure (Left err)
+    -- let dims' : Vect (length dims) Nat
+        -- dims' = rewrite lengthCorrect dims in dims
+    pure ?sdfsdf -- $ Right $ rewrite sym (lengthCorrect dims) in MkAFArray ptr (length dims) dims' dt
+
+export
+tile : AFArray dims dt -> (x,y,z,w : Nat) -> AFArray dims' dt
+tile arr x y z w = wrapAPIFunc "afTile" "randomUniform" $ afTile arr x y z w
+
+
 %foreign libArrayFire "af_randu"
 export
 af_randu : (newAFarray : GCPtr CAFArray) -> (dimslen : Int) -> (dims : Ptr Dim) -> (dtype : Int) -> PrimIO Int
@@ -854,6 +1067,38 @@ af_randu : (newAFarray : GCPtr CAFArray) -> (dimslen : Int) -> (dims : Ptr Dim) 
 -- randu : {n:_} -> (dt : DType) -> (dims : Vect n Nat) -> AFArray dims dt
 -- randu dt dims = wrapAPIFunc "afRandu" "randu" $ afRandu dt dims
 
+fillPtr : Storable a => HasIO io => List a -> Ptr a -> io (Ptr a)
+fillPtr = loop 0
+  where
+    loop : Int -> List a -> Ptr a -> io (Ptr a)
+    loop i [] ptr = pure ptr
+    loop i (x :: xs) ptr = poke ptr i x *> loop (i + 1) xs ptr
+
+export
+afVec2 : {a:_} -> HasIO io => Storable a => a -> a -> io (Either AFErr (AFArray [2] (ToDType a)))
+afVec2 x y =
+  alloc' {t=a} (sizeOf {a} * 2) $ \ptr => do
+    ptr <- fillPtr [x,y] (believe_me ptr)
+    afCreateArray' (prim__forgetPtr ptr) (ToDType a) [2]
+
+export
+afVec3 : {a:_} -> HasIO io => Storable a => a -> a -> a -> io (Either AFErr (AFArray [3] (ToDType a)))
+afVec3 x y z =
+  alloc' {t=a} (sizeOf {a} * 3) $ \ptr => do
+    ptr <- fillPtr [x,y,z] (believe_me ptr)
+    afCreateArray' (prim__forgetPtr ptr) (ToDType a) [3]
+
+export
+vec2 : {a:_} -> Storable a => a -> a -> AFArray [2] (ToDType a)
+vec2 x y = wrapAPIFunc "afVec2" "vec2" $ timeIt "vec2" $ afVec2 x y
+
+export
+vec3 : {a:_} -> Storable a => a -> a -> a -> AFArray [3] (ToDType a)
+vec3 x y z = wrapAPIFunc "afVec3" "vec3" $ afVec3 x y z
+
+-- how best to do fromList?
+-- fromList : Num a => List a -> AFArray dims dt
+
 --------------------------------------------------
 
 %foreign libArrayFire "af_select"
@@ -873,8 +1118,7 @@ export
 select : AFArray dims dt -> AFArray dims dt -> AFArray dims dt -> AFArray dims dt
 select cond a b = wrapAPIFunc "afSelect" "select" $ afSelect cond a b
 
-
---------------------------------------------------
+-------------------------------------------------
 
 %foreign libArrayFire "af_get_scalar"
 export
@@ -924,12 +1168,17 @@ afDotAll (MkAFArray xptr _ _ _) (MkAFArray yptr _ _ _) =
                             -- const af_array lhs, const af_array rhs,
                             -- const af_mat_prop optLhs, const af_mat_prop optRhs);
 
+export
+dotAll : AFArray [n] dt -> AFArray [n] dt -> Double
+dotAll x y = wrapAPIFunc "afSumAll" "sumAll" $ afDotAll x y
+
+
 export %foreign libArrayFire "af_clamp"
 af_clamp : (newAfarray : GCPtr CAFArray) -> (in' : CAFArray) -> (low : CAFArray) -> (high : CAFArray) -> (bool : Int) -> PrimIO Int
 
 export
 afClamp : HasIO io => AFArray dims dt -> AFArray dims dt -> AFArray dims dt -> io (Either AFErr (AFArray dims dt))
-afClamp = afNumOp3 af_clamp
+afClamp x y z = afNumOp3B af_clamp x y z False
     -- AFAPI af_err af_clamp(af_array *out, const af_array in,
                           -- const af_array lo, const af_array hi, const bool batch);
 
@@ -1129,7 +1378,7 @@ export
     --                         const af_array lhs, const af_array rhs,
     --                         const af_mat_prop optLhs, const af_mat_prop optRhs);
 export %foreign libArrayFire "af_matmul"
-af_matmul : (new : GCPtr CAFArray) -> (lhs : CAFArray) -> (rhs : CAFArray) -> (optLhs : Int) -> (optRhs : Int) ->PrimIO Int
+af_matmul : (new : GCPtr CAFArray) -> (lhs : CAFArray) -> (rhs : CAFArray) -> (optLhs : Int) -> (optRhs : Int) -> PrimIO Int
 
 export -- just define the one we need for now
 matVectMul : HasIO io => AFArray [x,y] dt -> AFArray [y] dt -> io (Either AFErr (AFArray [x] dt))
@@ -1147,7 +1396,37 @@ export
 (#>) : AFArray [x,y] dt -> AFArray [y] dt -> AFArray [x] dt
 x #> y = wrapAPIFunc "vectMult" "#>" $ matVectMul x y
 
+{-
+    AFAPI af_err af_gemm(af_array *C, const af_mat_prop opA, const af_mat_prop opB,
+                         const void *alpha, const af_array A, const af_array B,
+                         const void *beta);
+-}
+export %foreign libArrayFire "outer"
+af_outer : (new : GCPtr CAFArray) -> (lhs : CAFArray) -> (rhs : CAFArray) -> PrimIO Int
 
+-- this might need transposing
+export
+afMulOuter : HasIO io => AFArray [m] dt -> AFArray [n] dt -> io (Either AFErr (AFArray [m,n] dt))
+afMulOuter (MkAFArray xptr 1 [dims1] dt) (MkAFArray yptr _ [dims2] _) = do
+    ptr <- allocAF
+    res <- primIO $ af_outer ptr (derefCafArray xptr) (derefCafArray yptr)
+    case cast res of
+      AF_SUCCESS => pure (Right (MkAFArray ptr 2 [dims1,dims2] dt))
+      err => pure (Left err)
+
+export
+mulOuter : AFArray [m] dt -> AFArray [n] dt -> AFArray [m,n] dt
+mulOuter x y = wrapAPIFunc "afMulOuter" "mulOuter" $ afMulOuter x y
+
+export
+randomUniform'' : {auto rand : RandomEngine} -> {dt : DType} -> {dims : Vect n Nat} -> AFArray dims dt
+-- randomUniform'' = let arr = randomUniform' in select (randomUniform' `le` 0.5) (negate arr) arr
+randomUniform'' = (-1) + randomUniform' * 2 -- way faster
+
+export
+randomNormal'' : {auto rand : RandomEngine} -> {dt : DType} -> {dims : Vect n Nat} -> AFArray dims dt
+-- randomNormal'' = let arr = randomNormal' in select (randomUniform' `le` 0.5) (negate arr) arr
+randomNormal'' = (-1) + randomNormal' * 2
 
 
 export

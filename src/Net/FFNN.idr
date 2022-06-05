@@ -9,6 +9,8 @@ import Data.Strong.Array
 
 import System.Random.Natural
 
+import System.Random.Types
+
 import System.Random.PRNG.Squares
 
 import public Net.Activation

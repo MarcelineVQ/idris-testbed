@@ -13,10 +13,10 @@ public export
 liftA2 : Applicative f => (a -> b -> c) -> f a -> f b -> f c
 liftA2 f x y = [| f x y |]
 
-public export
-%inline
-subtract : Neg a => Num a => a -> a -> a
-subtract x y = x - y
+-- public export
+-- %inline
+-- subtract : Neg a => Num a => a -> a -> a
+-- subtract x y = x - y
 
 export
 -- %inline -- causes a loop currently
@@ -50,8 +50,8 @@ export
 export
 randEnv : StateT (Bits64,Bits64) IO a -> IO ()
 randEnv act = do
-  seed1 <- cast {from=Int} {to=Bits64} <$> randomIO
-  seed2 <- cast {from=Int} {to=Bits64} <$> randomIO
+  seed1 <- cast {from=Int32} {to=Bits64} <$> randomIO
+  seed2 <- cast {from=Int32} {to=Bits64} <$> randomIO
   _ <- runStateT (seed1,seed2) $ do
     z <- act
     pure ()
@@ -71,7 +71,7 @@ v ^ (S y) = v * (v ^ y)
 
 
 -- TODO: bring this up with other devs for idris about it's merits and negatives
-private
+export
 total
 %foreign "scheme:lambda (x) (blodwen-error-quit x)"
 lie_idris_crash : String -> a
