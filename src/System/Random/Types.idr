@@ -14,7 +14,7 @@ import System.Random
 -- randomBits32' upperBound = fromPrim (prim__randomBits32 upperBound)
 
 ----
--- Somehow the above is being re-exported anyway
+-- Somehow the above is being re-exported anyway?
 ----
 
 %foreign "scheme:blodwen-random"

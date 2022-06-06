@@ -1,12 +1,12 @@
 The Testbed
 =====
 
-Horros lurk here, a testbed of anything that catches my interest.
+Horrors lurk here, a testbed of anything that catches my interest.
 
 Take what you need but don't linger overlong.
 
 Items of interest:
-- ArrayFire Bindings
+- (barebones) ArrayFire Bindings
 - PRNG Experiments
 - Strongly-Typed Matrix API
 - Attempts at backpropogation in CPS form
@@ -17,4 +17,5 @@ Items of interest:
 - Probably incorrect Random instances for various primtives number types
 - A stupid and basic concurrent map for direct-and-dirty parallelization
 - Barebones timing for IO actions
-- 
+- Bits128 type and Bit rotation
+- A sketchy version1 UUID module

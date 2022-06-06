@@ -2,7 +2,7 @@ module BP.Test
 
 import Hedgehog
 
-import BP.Backprop2
+import BP.Backprop
 
 import Util
 
@@ -22,44 +22,44 @@ import Generics.Newtype
   [Generic, Eq, Ord, Num, Neg, Abs, Fractional, FromDouble, Integral]
 
 export
-linReg : Show a => Num a => Backprop a => AD z (a, a) -> AD z a -> AD z a
+linReg : Num a => Backprop a => AD z (a, a) -> AD z a -> AD z a
 linReg ab x with (out2 ab)
   _ | (b, y) = y * x + b
 -- (-1 , 2.0)
 
 export
-linRegHarder : Show a => Neg a => Num a => Backprop a => AD z (a, a, a) -> AD z a -> AD z a
+linRegHarder : Neg a => Num a => Backprop a => AD z (a, a, a) -> AD z a -> AD z a
 linRegHarder ab x with (mapSnd out2 (out2 ab))
   _ | (b, y, z') = y * x + b - z'
 -- ^ many choices we got (-8.5, 2.0, -7.5) when running which is also (-1 , 2.0, 0.0)
 
-linRegHarderer : Show a => Neg a => Num a => Backprop a => AD z (a, a, a, a) -> AD z a -> AD z a
+linRegHarderer : Neg a => Num a => Backprop a => AD z (a, a, a, a) -> AD z a -> AD z a
 linRegHarderer ab x with (mapSnd (mapSnd out2) (mapSnd out2 (out2 ab)))
   _ | (b, y, z', w) = y * x + b - z' * w
 
-linRegHarderer' : Show a => Neg a => Num a => Backprop a => AD z (a, a, a, a) -> AD z a -> AD z a
+linRegHarderer' : Neg a => Num a => Backprop a => AD z (a, a, a, a) -> AD z a -> AD z a
 linRegHarderer' ab x with (mapSnd (mapSnd out2) (mapSnd out2 (out2 ab)))
   _ | (b, y, z', w) = linReg (in2 z' w) (linReg (in2 b y) x)
 
-linReg1 : Show a => Neg a => Num a => Backprop a => AD z (a, a) -> AD z a -> AD z a
+linReg1 : Neg a => Num a => Backprop a => AD z (a, a) -> AD z a -> AD z a
 linReg1 ab x with (out2 ab)
   _ | (a', b') = a' + b' + x
 
-linReg2 : Show a => Neg a => Num a => Backprop a => AD z (a, a) -> AD z a -> AD z a
+linReg2 : Neg a => Num a => Backprop a => AD z (a, a) -> AD z a -> AD z a
 linReg2 ab x with (out2 ab)
   _ | (a', b') = a' - b' - x
 
-linReg3 : Show a => Neg a => Num a => Backprop a => AD z (a, a) -> AD z a -> AD z a
+linReg3 : Neg a => Num a => Backprop a => AD z (a, a) -> AD z a -> AD z a
 linReg3 ab x with (out2 ab)
   _ | (a', b') = a' * b' * x
 
-linReg1' : Show a => Neg a => Num a => Backprop a => AD z a -> AD z a -> AD z a
+linReg1' : Neg a => Num a => Backprop a => AD z a -> AD z a -> AD z a
 linReg1' ab x = ab + x
 
-linReg2' : Show a => Neg a => Num a => Backprop a => AD z a -> AD z a -> AD z a
+linReg2' : Neg a => Num a => Backprop a => AD z a -> AD z a -> AD z a
 linReg2' ab x = ab - x
 
-linReg3' : Show a => Neg a => Num a => Backprop a => AD z a -> AD z a -> AD z a
+linReg3' : Neg a => Num a => Backprop a => AD z a -> AD z a -> AD z a
 linReg3' ab x = ab * x
 
 -- this causes NaN for no good reason, is in2 our baddie?
@@ -68,20 +68,20 @@ linReg3' ab x = ab * x
 -- Is this due to out2 or in2?
 -- I do have a special out2...
 -- Is this from mutating vars instead of immutable?
-linReg4 : Show a => Neg a => Num a => Backprop a => AD z (a,a) -> AD z a -> AD z a
+linReg4 : Neg a => Num a => Backprop a => AD z (a,a) -> AD z a -> AD z a
 linReg4 ab x with (out2 ab)
   _ | (a', b') = linReg1 (in2 (linReg1 ab x) (linReg1 ab x)) x
 
 reg4Data : List (Double,Double) -- (7,3)
 reg4Data = [(1,23.0),(2,26.0),(3,29.0),(4,32.0),(5,35.0)]
 
-linReg5 : Show a => Neg a => Num a => Backprop a => AD z (a,a) -> AD z a -> AD z a
+linReg5 : Neg a => Num a => Backprop a => AD z (a,a) -> AD z a -> AD z a
 linReg5 ab x = linReg3 ab x + linReg2 ab x + linReg1 ab x + x
 
 reg5Data : List (Double,Double) -- (7,3)
 reg5Data = [(1,36.0),(2,58.0),(3,80.0),(4,102.0),(5,124.0),(6,146.0),(7,168.0),(8,190.0),(9,212.0)]
 
-linReg6 : Show a => Neg a => Num a => Backprop a => AD z a -> AD z a -> AD z a
+linReg6 : Neg a => Num a => Backprop a => AD z a -> AD z a -> AD z a
 linReg6 ab x = linReg3' ab (linReg3' ab x) + linReg2' ab (linReg2' ab x) + linReg1' ab (linReg1' ab x) + x
 -- linReg6 demonstrates that nesting is at issue
 

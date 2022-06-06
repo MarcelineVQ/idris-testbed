@@ -3,13 +3,13 @@
 .PHONY: build
 
 build:
-	@sae build
+	idris2 --build evo.ipkg
 
 support:
 	@c99 -L/opt/intel/mkl/lib/intel64 -lmkl_avx2 -laf -shared arrayfire.c -o libarrayfire.so
 
 repl:
-	@rlwrap sae repl
+	@rlwrap idris2 --repl evo.ipkg
 
 # install:
 #   idris2 --install package.ipkg

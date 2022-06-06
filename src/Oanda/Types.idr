@@ -112,10 +112,10 @@ record CandlestickData where
 
 public export
 Semigroup CandlestickData where
-  x <+> y = record { o = o x             -- Open is first open
-                   , h = max (h x) (h y) -- high is highest high
-                   , l = min (l x) (l y) -- low is lowest low
-                   , c = c y} x          -- Close is last close
+  x <+> y = { o := o x             -- Open is first open
+            , h := max (h x) (h y) -- high is highest high
+            , l := min (l x) (l y) -- low is lowest low
+            , c := c y} x          -- Close is last close
 
 public export
 record Candlestick where
@@ -134,11 +134,11 @@ Semigroup Candlestick where
   x <+> y = if time x < time y then combine x y else combine y x
     where
       combine : Candlestick -> Candlestick -> Candlestick
-      combine a b = record {complete = complete a && complete b
-                           ,volume   = volume a + volume b
-                           ,bid      = bid a <+> bid b
-                           ,mid      = mid a <+> mid b
-                           ,ask      = ask a <+> ask b} a
+      combine a b = {complete := complete a && complete b
+                    ,volume   := volume a + volume b
+                    ,bid      := bid a <+> bid b
+                    ,mid      := mid a <+> mid b
+                    ,ask      := ask a <+> ask b} a
 
 public export
 record CandlestickResponse where

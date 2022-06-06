@@ -19,7 +19,7 @@ liftA2 f x y = [| f x y |]
 -- subtract x y = x - y
 
 export
--- %inline -- causes a loop currently
+-- %inline -- inline causes a loop currently
 exp : (Num a, Ord b, Neg b) => a -> b -> a
 exp x y = if y <= 0 then 1 else x * exp x (y - 1)
 
@@ -71,6 +71,7 @@ v ^ (S y) = v * (v ^ y)
 
 
 -- TODO: bring this up with other devs for idris about it's merits and negatives
+-- NB: This exists now in one form or another in base
 export
 total
 %foreign "scheme:lambda (x) (blodwen-error-quit x)"

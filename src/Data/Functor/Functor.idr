@@ -1,5 +1,6 @@
 module Data.Functor.Functor
 
+{-
 infixr 9 ~>
 
 data Free : (Type -> Type) -> Type -> Type where
@@ -59,3 +60,4 @@ interpret' r (Free' y) = r (y >>= \z => ?dsff)
   -- interpret r (Pure y) = r ?dsfdsf --(pure y)
   -- interpret r (Free' y) = ?dsfdsf_2
 
+-}

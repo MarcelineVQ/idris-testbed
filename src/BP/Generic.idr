@@ -6,6 +6,9 @@ import Generics.Derive
 
 %language ElabReflection
 
+--- Derive backprop instances generically, no promises
+
+
 -- n-ary products, e.g. (a,b,c)   (data Foo x y = MkFoo x y)
 -- add just does pointwise combination
 NP (Backprop . f) ks => Backprop (NP f ks) where

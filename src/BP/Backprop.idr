@@ -138,8 +138,7 @@ Backprop Integer where
 -- 4) Upon returning from the @k@ (bouncing from the boundary of @resetT@), the mutated STRef is read back in
 -- 5) The adjoint part of the input variable is updated using @rb@ and the result of the continuation is returned.
 export %inline
-op1_  : Show a
-     => (b -> b) -- ^ zero
+op1_  : (b -> b) -- ^ zero
      -> (a -> a -> a) -- ^ plus
      -> (a -> (b, b -> a)) -- ^ returns : (function result, pullback)
      -> ContT x (ST s) (DVar s a)
@@ -164,8 +163,7 @@ op1_ zeroa plusa f ioa = do
 -- the function parameter.
 -- Note: the type parameters are completely unconstrained.
 export %inline
-op1  : Show a
-    => (b -> b) -- ^ zero
+op1  : (b -> b) -- ^ zero
     -> (a -> a -> a) -- ^ plus
     -> (a -> (b, b -> a)) -- ^ returns : (function result, pullback)
     -> AD s a
@@ -173,7 +171,7 @@ op1  : Show a
 op1 z plusa f (MkAD0 ioa) = MkAD0 $ op1_ z plusa f ioa
 
 export %inline
-op1'  : Show a => Backprop a => Backprop b
+op1'  : Backprop a => Backprop b
     => (a -> (b, b -> a))
     -> AD s a
     -> AD s b
@@ -182,7 +180,7 @@ op1' f (MkAD0 ioa) = MkAD0 $ op1_ zero add f ioa
 
 -- | Helper for constructing unary functions that operate on Num instances (i.e. 'op1' specialized to Num)
 export %inline
-op1Num  : Show a => (Num a, Num b) =>
+op1Num  : (Num a, Num b) =>
           (a -> (b, b -> a)) -- ^ returns : (function result, pullback)
        -> AD s a
        -> AD s b
@@ -190,8 +188,7 @@ op1Num = op1 zeroNum addNum
 
 -- | Lift a binary function
 export %inline
-op2_  : Show a => Show b => Show c
-     => c -- ^ zero
+op2_  : c -- ^ zero
      -> (a -> a -> a) -- ^ plus
      -> (b -> b -> b) -- ^ plus
      -> (a -> b -> (c, c -> a, c -> b)) -- ^ returns : (function result, pullbacks)
@@ -218,8 +215,7 @@ op2_ zeroa plusa plusb f ioa iob = do
 --
 -- See 'op1' for more information.
 export %inline
-op2  : Show a => Show b => Show c
-    => c -- ^ zero
+op2  : c -- ^ zero
     -> (a -> a -> a) -- ^ plus
     -> (b -> b -> b) -- ^ plus
     -> (a -> b -> (c, c -> a, c -> b)) -- ^ returns : (function result, pullbacks)
@@ -227,8 +223,7 @@ op2  : Show a => Show b => Show c
 op2 z plusa plusb f (MkAD0 ioa) (MkAD0 iob) = MkAD0 $ op2_ z plusa plusb f ioa iob
 
 export %inline
-op2'_ : Show a => Show b => Show c
-     => (c -> c) -- ^ zero
+op2'_ : (c -> c) -- ^ zero
      -> (a -> a -> a) -- ^ plus
      -> (b -> b -> b) -- ^ plus
      -> (a -> b -> (c, c -> a, c -> b)) -- ^ returns : (function result, pullbacks)
@@ -252,14 +247,14 @@ op2'_ zeroa plusa plusb f ioa iob = do
     pure ry
 
 export %inline
-op2'  : Backprop a => Backprop b => Backprop c => Show a => Show b => Show c
+op2' : Backprop a => Backprop b => Backprop c
     => (a -> b -> (c, c -> a, c -> b)) -- ^ returns : (function result, pullbacks)
     -> (AD s a -> AD s b -> AD s c)
 op2' f (MkAD0 ioa) (MkAD0 iob) = MkAD0 $ op2'_ zero add add f ioa iob
 
 -- | Helper for constructing binary functions that operate on Num instances (i.e. 'op2' specialized to Num)
 export %inline
-op2Num  : (Num a, Num b, Num c) => Show a => Show b => Show c =>
+op2Num  : (Num a, Num b, Num c) =>
           (a -> b -> (c, c -> a, c -> b)) -- ^ returns : (function result, pullback)
        -> AD s a
        -> AD s b
@@ -267,19 +262,19 @@ op2Num  : (Num a, Num b, Num c) => Show a => Show b => Show c =>
 op2Num = op2 0 (+) (+)
 
 export
-Show a => Backprop a => Backprop (AD s a) where
+Backprop a => Backprop (AD s a) where
   zero = op1' $ \x =>   (zero x, zero)
   one  = op1' $ \x =>   (one  x, zero)
   add  = op2' $ \x,y => (add x y, (id,id))
 
 export
-Show a => Num a => Num (AD s a) where
+Num a => Num (AD s a) where
   (+) = op2Num $ \x,y => (x + y, id, id)
   (*) = op2Num $ \x,y => (x*y, (y *), (x *))
   fromInteger x = MkAD0 $ lift $ var (fromInteger x) 0 -- auto' (fromInteger x)
 
 export
-Show a => Neg a => Neg (AD s a) where
+Neg a => Neg (AD s a) where
   (-) = op2Num $ \x,y => (x - y, id, negate)
   negate = op1Num $ \x => (negate x, negate) -- 0 - x -- TODO check this
 
@@ -295,12 +290,12 @@ FromDouble a => FromDouble (AD s a) where
   fromDouble x = MkAD0 $ lift $ var (fromDouble x) 0.0 -- auto' (fromInteger x)
 
 export
-Show a => Neg a => Fractional a => Fractional (AD s a) where
+Neg a => Fractional a => Fractional (AD s a) where
   (/) = op2Num $ \x,y => (x / y, (/ y), (\g => -g*x/(y*y) ))
   recip = op1Num $ \x => (recip x, (/(x*x)) . negate)
 
 export
-Show a => Neg a => Floating a => Floating (AD s a) where
+Neg a => Floating a => Floating (AD s a) where
   pi = auto'' pi
   euler = auto'' euler
   exp = op1Num $ \x => (exp x, (exp x *))
@@ -366,8 +361,7 @@ isoVar2 = E.isoVar2 E.addFunc E.addFunc
 
 -- | Evaluate (forward mode) and differentiate (reverse mode) a unary function, without committing to a specific numeric typeclass
 export %inline
-rad1g  : Show a -- ^ zero
-      => (a -> a) -- ^ zero
+rad1g  : (a -> a) -- ^ zero
       -> (b -> b) -- ^ one
       -> (forall s . AD s a -> AD s b)
       -> a -- ^ function argument
@@ -441,7 +435,7 @@ radNg zeroa onea f xs = runST $ do
 -- >>> rad1 (\x -> x * x) 1
 -- (1, 2)
 export %inline
-rad1  : (Backprop a, Backprop b, Show a) =>
+rad1  : (Backprop a, Backprop b) =>
         (forall s . AD s a -> AD s b) -- ^ function to be differentiated
      -> a -- ^ function argument
      -> (b, a) -- ^ (result, adjoint)
@@ -470,7 +464,7 @@ grad  : (Traversable t, Num a, Num b) =>
 grad = radNg 0 1
 
 export %inline
-gradBP : (Backprop a, Backprop b, Show a) => (forall s . AD s a -> AD s b) -> a -> a
+gradBP : (Backprop a, Backprop b) => (forall s . AD s a -> AD s b) -> a -> a
 gradBP f = snd . rad1 f
 
 export %inline
@@ -479,7 +473,7 @@ gradBP2 f x y = snd $ rad2 f x y
 
 -- i feel eval is modifying the state when it shoulnd't
 export %inline
-evalBP : (Backprop a, Backprop b, Show a) => (forall s . AD s a -> AD s b) -> a -> b
+evalBP : (Backprop a, Backprop b) => (forall s . AD s a -> AD s b) -> a -> b
 evalBP f x = fst $ rad1 f x
 
 export %inline
@@ -506,7 +500,7 @@ opr ioa = do
   lift $ var z x_bar
 
 export %inline
-out2 : Show a => Show b => Backprop a => Backprop b => AD z (a, b) -> (AD z a, AD z b)
+out2 : Backprop a => Backprop b => AD z (a, b) -> (AD z a, AD z b)
 -- out2 p = ( MkAD0 (opl (unAD0 p))
          -- , MkAD0 (opr (unAD0 p))
          -- )
@@ -520,5 +514,5 @@ out2 p = ( op1 zero addLeft  (\(x, y) => (x, ( ,y))) p
     addRight (x,y1) (_,y2) = (x, y1 `add` y2)
 
 export %inline
-in2 : Show a => Show b => Backprop a => Backprop b => AD z a -> AD z b -> AD z (a, b)
+in2 : Backprop a => Backprop b => AD z a -> AD z b -> AD z (a, b)
 in2 = op2' (\x,y => ((x, y), (fst, snd)))

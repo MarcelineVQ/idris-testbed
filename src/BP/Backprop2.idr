@@ -355,6 +355,7 @@ grad = radNg 0 1
 --
 -- we use two type parameters to keep the distinction between primal and dual variables
 
+public export
 interface Backprop a da where
   zero  : a -> da
   one  : da -> da
