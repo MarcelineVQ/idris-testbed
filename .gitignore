@@ -5,7 +5,6 @@ build/
 *.a
 *.tcc
 *.ttm
-evo.ipkg
 oanda.txt
 oanda-api-key.txt
 oanda-data.db

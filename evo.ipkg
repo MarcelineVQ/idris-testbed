@@ -1,0 +1,101 @@
+package evo
+version     = 0.0.0.2
+
+sourcedir   = "src"
+main        = BP.Test
+executable  = "Fef"
+
+depends     = base
+            , contrib
+            , managed
+            , elab-util
+            , sop
+            , pretty-show -- test comment
+            , json
+            , hedgehog
+            , tailrec
+            , rhone-js -- {- test comment -}
+            -- Interestingly just having:
+            -- , rhone-js {- test comment -}
+            -- Is a parse error for idris itself.
+            , rhone
+            , dom
+            -- My libs:
+            , sqlite3
+            , newtype-deriving
+            , sarray
+
+modules     = BP
+            , BP.Backprop
+            , BP.Backprop.Interfaces
+            , BP.Backprop2
+            , BP.Foo
+            , BP.Generic
+            , BP.Test
+            , BP2
+            , Network.OAuth2
+            , Control.Monad.Cont
+            , Control.Monad.MonadRandom
+            , Control.Monad.Random.RandT
+            , Data.ArrayFire
+            , Data.ArrayFire.Num
+            , Data.Functor.Functor
+            , Data.Ix
+            , Data.JSON.Array
+            , Data.Linear
+            , Data.Random.RVar
+            , Data.Random.Source
+            , Data.Strong.IOArray
+            , Data.Strong.IOMatrix
+            , Data.Strong.Matrix
+            , Data.TMap
+            , Data.UnsafeIOArray
+            , Data.UnsafeIOMatrix
+            , Data.Vector
+            , Data.Vector.Mutable
+            , Database.Text
+            , Language.C
+            , Net.Activation
+            , Net.AFAE
+            , Net.AFFFNN
+            , Net.AFSSS15M
+            , Net.FFNN
+            , Net.Net
+            , Net.Random.IO
+            , Net.Random.Squares
+            , Net.RecNN
+            , Net.SQL
+            , Net.SRecNN
+            , Net.SSS15M
+            , Net.SSSRec15M
+            , Net.Types
+            , Oanda
+            , Oanda.Chart
+            , Oanda.Coda.Decode
+            , Oanda.Coda.Encode
+            , Oanda.Coda.Parser
+            , Oanda.Foo
+            , Oanda.JSON
+            , Oanda.Request
+            , Oanda.ToDB
+            , Oanda.Types
+            , Oanda.Types.Instrument
+            , Stripe
+            , System.ConcurrentMap
+            , System.Future2
+            , System.Random.Distribution
+            , System.Random.Natural
+            , System.Random.PRNG.Keys
+            , System.Random.PRNG.Keys.Keys1
+            , System.Random.PRNG.Keys.Keys2
+            , System.Random.PRNG.Keys.Keys3
+            , System.Random.PRNG.RandomGen
+            , System.Random.PRNG.Squares
+            , System.Random.RandomGen
+            , System.Random.Types
+            , System.XArgs
+            , TimeIt
+            , Util
+            , Data.Bits.Rotate
+            , Data.Bits.Bits128
+            , UUID

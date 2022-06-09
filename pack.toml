@@ -13,27 +13,25 @@ collection = "nightly-220608"
 # path = "https://github.com/bar/foo"
 # ipkg = "foo.ipkg"
 
-# Override library `toml` from package collection `nightly-220503`
-# by using a custom commit hash.
-[custom.nightly-220608.newtype-deriving]
+[custom.all.newtype-deriving]
 type   = "github"
 url    = "https://github.com/MarcelineVQ/idris2-newtype-deriving"
 commit = "376960fab2dc56740e96f496ad76d692b1f41fae"
 ipkg   = "newtype-deriving.ipkg"
 
-[custom.nightly-220608.managed]
+[custom.all.managed]
 type   = "github"
 url    = "https://github.com/MarcelineVQ/idris2-managed"
 commit = "a80d92ad2569bb652534cc7b1203561118be8dd4"
 ipkg   = "managed.ipkg"
 
-[custom.nightly-220608.sqlite3]
+[custom.all.sqlite3]
 type   = "github"
 url    = "https://github.com/MarcelineVQ/idris-sqlite3"
 commit = "e722882a2a543de18d8163803a01004e7eeea1df"
 ipkg   = "sqlite3.ipkg"
 
-[custom.nightly-220608.sarray]
+[custom.all.sarray]
 type   = "github"
 url    = "https://github.com/MarcelineVQ/idris2-sarray"
 commit = "91ffb1b9280d72780c5940b8e6ca19cefece8c6c"
