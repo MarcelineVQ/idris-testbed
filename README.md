@@ -5,8 +5,10 @@ Horrors lurk here, a testbed of anything that catches my interest.
 
 Take what you need but don't linger overlong.
 
+Project depends are most easily satsified via the [pack](https://github.com/stefan-hoeck/idris2-pack) utility.
+
 Items of interest:
-- (barebones) ArrayFire Bindings
+- (barebones) ArrayFire C Bindings
 - PRNG Experiments
 - Strongly-Typed Matrix API
 - Attempts at backpropogation in CPS form

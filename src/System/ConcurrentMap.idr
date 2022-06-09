@@ -3,6 +3,8 @@ module System.ConcurrentMap
 import Data.IORef
 import Data.List -- splitAt
 
+import System.Info -- getNProcessors
+import Data.Maybe
 
 worker : IO b -> IORef (Maybe b) -> IO (ThreadID, IORef (Maybe b))
 worker act ref = do
@@ -31,4 +33,4 @@ mapNConcurrently i f xs = do
 export
 %inline
 mapConcurrently : (a -> IO b) -> List a -> IO (List b)
-mapConcurrently = mapNConcurrently 8
+mapConcurrently f xs = mapNConcurrently (fromMaybe 8 (!getNProcessors)) f xs
